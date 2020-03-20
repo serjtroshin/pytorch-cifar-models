@@ -41,11 +41,11 @@ def main():
         # model can be set to anyone that I have defined in models folder
         # note the model should match to the cifar type !
 
-        model = resnet20_cifar()
+        # model = resnet20_cifar()
         # model = resnet32_cifar()
         # model = resnet44_cifar()
         # model = resnet110_cifar()
-        # model = preact_resnet110_cifar()
+        model = wtii_preact_resnet110_cifar()
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -60,12 +60,12 @@ def main():
         # mkdir a new folder to store the checkpoint and best model
         if not os.path.exists('result'):
             os.makedirs('result')
-        fdir = 'result/resnet20_cifar10'
+        fdir = 'result/preact_resnet110_cifar'
         if not os.path.exists(fdir):
             os.makedirs(fdir)
 
         # adjust the lr according to the model type
-        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar)):
+        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar)):
             model_type = 1
         elif isinstance(model, Wide_ResNet_Cifar):
             model_type = 2
@@ -205,7 +205,6 @@ def train(trainloader, model, criterion, optimizer, epoch):
         data_time.update(time.time() - end)
 
         input, target = input.cuda(), target.cuda()
-
         # compute output
         output = model(input)
         loss = criterion(output, target)
@@ -259,6 +258,12 @@ def validate(val_loader, model, criterion):
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
+
+            if i == 0:
+                _, diffs = model.module(input[:1, ...], debug=True)
+                if diffs is not None: # if batch size is correct
+                    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+                    print("DEBUG:", "\n".join(map(str, info.items())))
 
             if i % args.print_freq == 0:
                 print('Test: [{0}/{1}]\t'

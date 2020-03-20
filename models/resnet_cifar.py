@@ -9,12 +9,39 @@ Reference:
 import torch
 import torch.nn as nn
 import math
+import sys
+
+sys.path.append('../')
+from utils.plot_utils import ConvergenceMeter
 
 
 def conv3x3(in_planes, out_planes, stride=1):
     " 3x3 convolution with padding "
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
 
+def get_norm_func():
+    return {
+        "inst" : nn.InstanceNorm2d,
+        "batch" : nn.BatchNorm2d
+    }
+
+class Sequential(nn.Sequential):
+    def __init__(self, *args):
+        super(Sequential, self).__init__(*args)
+        self.meter = ConvergenceMeter()
+
+    def _reset(self):
+        self.meter.reset()
+    def forward(self, *input, debug=False):
+        self._reset()
+        input = list(self._modules.values())[0](*input)
+        for module in list(self._modules.values())[1:]:
+            input = module(*input)
+            if debug:
+                self.meter.update(input[0])
+        if debug:
+            return input, self.meter.diffs
+        return input, None
 
 class BasicBlock(nn.Module):
     expansion=1
@@ -84,6 +111,50 @@ class Bottleneck(nn.Module):
         out = self.relu(out)
 
         return out
+
+
+class IIPreActBasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, 
+                    norm_func=nn.InstanceNorm2d, identity_mapping=False):
+        super(IIPreActBasicBlock, self).__init__()
+        self.bn1 = norm_func(inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv1 = conv3x3(inplanes * 2, planes, stride)
+        self.bn2 = norm_func(planes)
+        self.conv2 = conv3x3(planes, planes)
+        self.norml = norm_func(planes)
+        self.downsample = downsample
+        self.stride = stride
+
+        self.identity_mapping = identity_mapping
+
+    def forward(self, z, x):
+        residual = z
+        
+        z = self.bn1(z)
+        z = self.relu(z)
+
+        z_cat = torch.cat((z, x), 1)
+        if self.downsample is not None:
+            residual = self.downsample(z)
+            x = self.downsample(x)
+        
+       
+
+        out = self.conv1(z_cat)
+
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+
+        out += residual
+
+        if not self.identity_mapping:
+            out = self.norml(out) 
+
+        return out, x
 
 
 class PreActBasicBlock(nn.Module):
@@ -265,6 +336,75 @@ class PreAct_ResNet_Cifar(nn.Module):
 
 
 
+class WTIIPreAct_ResNet_Cifar(nn.Module):
+
+    def __init__(self, block, layers, num_classes=10, **kwargs):
+        super(WTIIPreAct_ResNet_Cifar, self).__init__()
+
+        norm_func=kwargs.get("norm_func", "inst")
+        wnorm=kwargs.get("wnorm", False) # weight normalization
+        identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
+
+        norm_func = get_norm_func()[norm_func]
+
+        self.inplanes = 16
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.layer1 = self._make_layer(block, 16, layers[0])
+        self.layer2 = self._make_layer(block, 32, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 64, layers[2], stride=2)
+        self.bn = norm_func(64*block.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.avgpool = nn.AvgPool2d(8, stride=1)
+        self.fc = nn.Linear(64*block.expansion, num_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+    
+
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes*block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes*block.expansion, kernel_size=1, stride=stride, bias=False)
+            )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes*block.expansion
+
+        layers.append(block(self.inplanes, planes))
+        for _ in range(2, blocks):
+            layers.append(layers[-1]) # weight tieing
+            
+        return Sequential(*layers)
+
+    def forward(self, x, debug=False):
+
+        x = self.conv1(x)
+        z = torch.zeros_like(x)
+
+        (z, x), info1 = self.layer1(z, x, debug=debug)
+        (z, x), info2 = self.layer2(z, x, debug=debug)
+        (z, x), info3 = self.layer3(z, x, debug=debug)
+
+        z = self.bn(z)
+        z = self.relu(z)
+        z = self.avgpool(z)
+        z = z.view(z.size(0), -1)
+        z = self.fc(z)
+        
+        if not debug:
+            return z
+        
+        return z, [info1, info2, info3]
+
+
+
 def resnet20_cifar(**kwargs):
     model = ResNet_Cifar(BasicBlock, [3, 3, 3], **kwargs)
     return model
@@ -310,6 +450,11 @@ def preact_resnet110_cifar(**kwargs):
     return model
 
 
+def wtii_preact_resnet110_cifar(**kwargs):
+    model = WTIIPreAct_ResNet_Cifar(IIPreActBasicBlock, [18, 18, 18], **kwargs)
+    return model
+
+
 def preact_resnet164_cifar(**kwargs):
     model = PreAct_ResNet_Cifar(PreActBottleneck, [18, 18, 18], **kwargs)
     return model
@@ -321,8 +466,10 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = resnet20_cifar()
-    y = net(torch.randn(1, 3, 64, 64))
+    net = wtii_preact_resnet110_cifar()
+    y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
     print(y.size())
+    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+    print("\n".join(map(str, info.items())))
 

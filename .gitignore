@@ -1,2 +1,4 @@
+logs/
+result/
 __pycache__
 data/*
