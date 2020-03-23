@@ -3,6 +3,8 @@ import os
 import time
 import shutil
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,30 +15,75 @@ import torch.backends.cudnn as cudnn
 import torchvision
 import torchvision.transforms as transforms
 
+from tensorboardX import SummaryWriter
+
 from models import *
+from utils.plot_utils import get_logger
 
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
-parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
-parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', help='mini-batch size (default: 128),only used for train')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
+
+parser.add_argument("--name", type=str, default="N/A",
+                        help="experiment name")
+parser.add_argument("--work_dir", default="ResNetexps", type=str,
+                    help="experiment directory.")
+
+parser.add_argument("--seed", type=int, default=228,
+                    help="random seed")
+parser.add_argument('--epochs', default=200, type=int, metavar='N', 
+                    help='number of total epochs to run')
+parser.add_argument('--start-epoch', default=0, type=int, metavar='N', 
+                    help='manual epoch number (useful on restarts)')
+parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', 
+                    help='mini-batch size (default: 128),only used for train')
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', 
+                    help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
-parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', help='print frequency (default: 10)')
-parser.add_argument('--resume', default='', type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
-parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
-parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT', help='10 for cifar10,100 for cifar100 (default: 10)')
+parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', 
+                    help='weight decay (default: 1e-4)')
+parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', 
+                    help='print frequency (default: 10)')
+parser.add_argument('--resume', default='', type=str, metavar='PATH', 
+                    help='path to latest checkpoint (default: none)')
+parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', 
+                    help='evaluate model on validation set')
+parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT', 
+                    help='10 for cifar10,100 for cifar100 (default: 10)')
+
+parser.add_argument('--wnorm', '--wn', action="store_true", 
+                    help='weight normalization (do not use mess it with weight decay)')
+parser.add_argument('--norm_func', default='batch', choices=get_norm_func().keys(), 
+                    help='normalization function for resnet block')
+parser.add_argument("--identity_mapping", action="store_true", 
+                        help="residual path is clear as in PreResNet") 
 
 best_prec = 0
+train_global_it = 0
+test_global_it = 0
 
 def main():
-    global args, best_prec
+    global args, best_prec, logging, writer
     args = parser.parse_args()
-    use_gpu = torch.cuda.is_available()
+
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        use_gpu = torch.cuda.is_available()
+    else:
+        print("running in cpu mode!")
+
+    print(f"Experiment name: {args.name}")
+    args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
+    args.work_dir = os.path.join(args.work_dir, "{}-{}".format(args.name, time.strftime('%Y-%m-%d--%H-%M-%S')))
+    if not os.path.exists(args.work_dir):
+        os.makedirs(args.work_dir)
+    print('Experiment dir : {}'.format(args.work_dir))
+    logging = get_logger(os.path.join(args.work_dir, "log.txt"))
+    writer = SummaryWriter(args.work_dir, flush_secs=1)
+
 
     # Model building
-    print('=> Building model...')
+    logging('=> Building model...')
     if use_gpu:
         # model can be set to anyone that I have defined in models folder
         # note the model should match to the cifar type !
@@ -45,7 +92,9 @@ def main():
         # model = resnet32_cifar()
         # model = resnet44_cifar()
         # model = resnet110_cifar()
-        model = wtii_preact_resnet110_cifar()
+        model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
+                                            norm_func=args.norm_func, 
+                                            identity_mapping=args.identity_mapping)
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -72,7 +121,7 @@ def main():
         elif isinstance(model, (ResNeXt_Cifar, DenseNet_Cifar)):
             model_type = 3
         else:
-            print('model type unrecognized...')
+            logging('model type unrecognized...')
             return
 
         model = nn.DataParallel(model).cuda()
@@ -80,25 +129,33 @@ def main():
         optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
         cudnn.benchmark = True
     else:
-        print('Cuda is not available!')
+        logging('Cuda is not available!')
         return
 
     if args.resume:
         if os.path.isfile(args.resume):
-            print('=> loading checkpoint "{}"'.format(args.resume))
+            logging('=> loading checkpoint "{}"'.format(args.resume))
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_prec = checkpoint['best_prec']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
+            logging("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
         else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+            logging("=> no checkpoint found at '{}'".format(args.resume))
+
+    args.n_all_param = sum([p.nelement() for p in model.parameters() if p.requires_grad])
+
+    logging('=' * 100)
+    for k, v in args.__dict__.items():
+        logging('    - {} : {}'.format(k, v))
+    logging('=' * 100)
+    logging(f'#params = {args.n_all_param}')
 
     # Data loading and preprocessing
     # CIFAR10
     if args.cifar_type == 10:
-        print('=> loading cifar10 data...')
+        logging('=> loading cifar10 data...')
         normalize = transforms.Normalize(mean=[0.491, 0.482, 0.447], std=[0.247, 0.243, 0.262])
 
         train_dataset = torchvision.datasets.CIFAR10(
@@ -124,7 +181,7 @@ def main():
         testloader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False, num_workers=2)
     # CIFAR100
     else:
-        print('=> loading cifar100 data...')
+        logging('=> loading cifar100 data...')
         normalize = transforms.Normalize(mean=[0.507, 0.487, 0.441], std=[0.267, 0.256, 0.276])
 
         train_dataset = torchvision.datasets.CIFAR100(
@@ -172,6 +229,11 @@ def main():
             'optimizer': optimizer.state_dict(),
         }, is_best, fdir)
 
+        writer.add_scalar('precison_by_epoch', 
+                                prec,
+                                epoch)
+    writer.close()
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -192,6 +254,7 @@ class AverageMeter(object):
 
 
 def train(trainloader, model, criterion, optimizer, epoch):
+    global train_global_it
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -224,16 +287,24 @@ def train(trainloader, model, criterion, optimizer, epoch):
         end = time.time()
 
         if i % args.print_freq == 0:
-            print('Epoch: [{0}][{1}/{2}]\t'
+            logging('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
                    epoch, i, len(trainloader), batch_time=batch_time,
                    data_time=data_time, loss=losses, top1=top1))
-
+            writer.add_scalar('train/loss', 
+                                losses.val,
+                                train_global_it)
+            writer.add_scalar('train/top1', 
+                                top1.val,
+                                train_global_it)
+            train_global_it += 1
+            
 
 def validate(val_loader, model, criterion):
+    global test_global_it
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -259,21 +330,28 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0:
+            if i == 0 and isinstance(model, WTIIPreAct_ResNet_Cifar):
                 _, diffs = model.module(input[:1, ...], debug=True)
                 if diffs is not None: # if batch size is correct
                     info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-                    print("DEBUG:", "\n".join(map(str, info.items())))
+                    logging("DEBUG:" + "\n".join(map(str, info.items())))
 
             if i % args.print_freq == 0:
-                print('Test: [{0}/{1}]\t'
+                logging('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
                    i, len(val_loader), batch_time=batch_time, loss=losses,
                    top1=top1))
+                writer.add_scalar('test/loss', 
+                                    losses.val,
+                                    test_global_it)
+                writer.add_scalar('test/top1',
+                                    top1.val,
+                                    test_global_it)
+                test_global_it += 1
 
-    print(' * Prec {top1.avg:.3f}% '.format(top1=top1))
+    logging(' * Prec {top1.avg:.3f}% '.format(top1=top1))
 
     return top1.avg
 

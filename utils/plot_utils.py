@@ -1,4 +1,4 @@
-
+import functools
 
 class ConvergenceMeter(object):
     """Computes and stores current convergence stats"""
@@ -17,3 +17,13 @@ class ConvergenceMeter(object):
         self.diffs.append(self.curr_diff)
         self.prev_z = z
         self.bs = z.shape[0]
+
+def logging(s, log_path, print_=True, log_=True):
+    if print_:
+        print(s)
+    if log_:
+        with open(log_path, 'a+') as f_log:
+            f_log.write(s + '\n')
+
+def get_logger(log_path, **kwargs):
+    return functools.partial(logging, log_path=log_path, **kwargs)
