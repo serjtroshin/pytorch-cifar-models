@@ -15,6 +15,8 @@ import torch.backends.cudnn as cudnn
 import torchvision
 import torchvision.transforms as transforms
 
+from tensorboardX import SummaryWriter
+
 from models import *
 from utils.plot_utils import get_logger
 
@@ -37,12 +39,6 @@ parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N',
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', 
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
-parser.add_argument('--wnorm', '--wn', action="store_true", 
-                    help='weight normalization (do not use mess it with weight decay)')
-parser.add_argument('--norm_func', default='batch', choices=get_norm_func().keys(), 
-                    help='normalization function for resnet block')
-parser.add_argument("--identity_mapping", action="store_true", 
-                        help="residual path is clear as in PreResNet") 
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', 
                     help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', 
@@ -54,10 +50,19 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT', 
                     help='10 for cifar10,100 for cifar100 (default: 10)')
 
+parser.add_argument('--wnorm', '--wn', action="store_true", 
+                    help='weight normalization (do not use mess it with weight decay)')
+parser.add_argument('--norm_func', default='batch', choices=get_norm_func().keys(), 
+                    help='normalization function for resnet block')
+parser.add_argument("--identity_mapping", action="store_true", 
+                        help="residual path is clear as in PreResNet") 
+
 best_prec = 0
+train_global_it = 0
+test_global_it = 0
 
 def main():
-    global args, best_prec, logging
+    global args, best_prec, logging, writer
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -74,6 +79,7 @@ def main():
         os.makedirs(args.work_dir)
     print('Experiment dir : {}'.format(args.work_dir))
     logging = get_logger(os.path.join(args.work_dir, "log.txt"))
+    writer = SummaryWriter(args.work_dir, flush_secs=1)
 
 
     # Model building
@@ -223,6 +229,11 @@ def main():
             'optimizer': optimizer.state_dict(),
         }, is_best, fdir)
 
+        writer.add_scalar('precison_by_epoch', 
+                                prec,
+                                epoch)
+    writer.close()
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -243,6 +254,7 @@ class AverageMeter(object):
 
 
 def train(trainloader, model, criterion, optimizer, epoch):
+    global train_global_it
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -282,9 +294,17 @@ def train(trainloader, model, criterion, optimizer, epoch):
                   'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
                    epoch, i, len(trainloader), batch_time=batch_time,
                    data_time=data_time, loss=losses, top1=top1))
+            writer.add_scalar('train/loss', 
+                                losses.val,
+                                train_global_it)
+            writer.add_scalar('train/top1', 
+                                top1.val,
+                                train_global_it)
+            train_global_it += 1
             
 
 def validate(val_loader, model, criterion):
+    global test_global_it
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -310,7 +330,7 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0:
+            if i == 0 and isinstance(model, WTIIPreAct_ResNet_Cifar):
                 _, diffs = model.module(input[:1, ...], debug=True)
                 if diffs is not None: # if batch size is correct
                     info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
@@ -323,6 +343,13 @@ def validate(val_loader, model, criterion):
                   'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
                    i, len(val_loader), batch_time=batch_time, loss=losses,
                    top1=top1))
+                writer.add_scalar('test/loss', 
+                                    losses.val,
+                                    test_global_it)
+                writer.add_scalar('test/top1',
+                                    top1.val,
+                                    test_global_it)
+                test_global_it += 1
 
     logging(' * Prec {top1.avg:.3f}% '.format(top1=top1))
 
