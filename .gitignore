@@ -3,3 +3,5 @@ result/
 __pycache__
 data/*
 .vscode
+nohup.out
+ResNetexps*/
