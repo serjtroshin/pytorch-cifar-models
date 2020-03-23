@@ -12,7 +12,8 @@ import math
 import sys
 
 sys.path.append('../')
-from utils.plot_utils import ConvergenceMeter
+from utils.utils import Sequential
+from utils.optimization import weight_norm
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -24,24 +25,6 @@ def get_norm_func():
         "inst" : nn.InstanceNorm2d,
         "batch" : nn.BatchNorm2d
     }
-
-class Sequential(nn.Sequential):
-    def __init__(self, *args):
-        super(Sequential, self).__init__(*args)
-        self.meter = ConvergenceMeter()
-
-    def _reset(self):
-        self.meter.reset()
-    def forward(self, *input, debug=False):
-        self._reset()
-        input = list(self._modules.values())[0](*input)
-        for module in list(self._modules.values())[1:]:
-            input = module(*input)
-            if debug:
-                self.meter.update(input[0])
-        if debug:
-            return input, self.meter.diffs
-        return input, None
 
 class BasicBlock(nn.Module):
     expansion=1
@@ -129,6 +112,16 @@ class IIPreActBasicBlock(nn.Module):
         self.stride = stride
 
         self.identity_mapping = identity_mapping
+
+    def wnorm(self):
+        self.conv1, self.conv1_fn = weight_norm(module=self.conv1, names=['weight'], dim=0)
+        self.conv2, self.conv2_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
+
+    def reset(self):
+        if 'conv1_fn' in self.__dict__:
+            self.conv1_fn.reset(self.conv1)
+        if 'conv2_fn' in self.__dict__:
+            self.conv2_fn.reset(self.conv2)
 
     def forward(self, z, x):
         residual = z
@@ -361,10 +354,18 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-    
+            #elif isinstance(m, nn.BatchNorm2d):
+            #    m.weight.data.fill_(1)
+            #    m.bias.data.zero_()
+
+        if wnorm:
+          self.wnorm()
+
+    def wnorm(self):
+        # wnorm
+        self.layer1.wnorm()
+        self.layer2.wnorm()
+        self.layer3.wnorm()
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -466,7 +467,7 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_resnet110_cifar()
+    net = wtii_preact_resnet110_cifar(wnorm=True)
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
     print(y.size())

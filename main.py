@@ -22,6 +22,8 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='man
 parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', help='mini-batch size (default: 128),only used for train')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
+parser.add_argument('--wnorm', '--wn', action="store_true", help='weight normalization (do not use mess it with weight decay)')
+parser.add_argument('--norm_func', default='batch', choices=get_norm_func().keys(), help='normalization function for resnet block')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
@@ -45,7 +47,7 @@ def main():
         # model = resnet32_cifar()
         # model = resnet44_cifar()
         # model = resnet110_cifar()
-        model = wtii_preact_resnet110_cifar()
+        model = wtii_preact_resnet110_cifar(wnorm=args.wnorm)
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -94,6 +96,14 @@ def main():
             print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
+
+    args.n_all_param = sum([p.nelement() for p in model.parameters() if p.requires_grad])
+    
+    print('=' * 100)
+    for k, v in args.__dict__.items():
+        print('    - {} : {}'.format(k, v))
+    print('=' * 100)
+    print(f'#params = {args.n_all_param}')
 
     # Data loading and preprocessing
     # CIFAR10
