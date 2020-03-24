@@ -336,16 +336,16 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
         norm_func=kwargs.get("norm_func", "inst")
         wnorm=kwargs.get("wnorm", False) # weight normalization
-        identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
+        self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
 
-        norm_func = get_norm_func()[norm_func]
+        self.norm_func = get_norm_func()[norm_func]
 
         self.inplanes = 16
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.layer1 = self._make_layer(block, 16, layers[0])
         self.layer2 = self._make_layer(block, 32, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 64, layers[2], stride=2)
-        self.bn = norm_func(64*block.expansion)
+        self.bn = self.norm_func(64*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
         self.fc = nn.Linear(64*block.expansion, num_classes)
@@ -375,10 +375,10 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
+        layers.append(block(self.inplanes, planes, stride, downsample, norm_func=self.norm_func, identity_mapping=self.identity_mapping))
         self.inplanes = planes*block.expansion
 
-        layers.append(block(self.inplanes, planes))
+        layers.append(block(self.inplanes, planes, norm_func=self.norm_func, identity_mapping=self.identity_mapping))
         for _ in range(2, blocks):
             layers.append(layers[-1]) # weight tieing
             

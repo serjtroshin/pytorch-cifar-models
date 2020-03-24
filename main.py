@@ -152,6 +152,8 @@ def main():
     logging('=' * 100)
     logging(f'#params = {args.n_all_param}')
 
+    logging(str(model))
+
     # Data loading and preprocessing
     # CIFAR10
     if args.cifar_type == 10:
@@ -330,7 +332,7 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0 and isinstance(model, WTIIPreAct_ResNet_Cifar):
+            if i == 0 and isinstance(model.module, WTIIPreAct_ResNet_Cifar):
                 _, diffs = model.module(input[:1, ...], debug=True)
                 if diffs is not None: # if batch size is correct
                     info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
