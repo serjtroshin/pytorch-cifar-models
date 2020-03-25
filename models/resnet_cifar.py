@@ -107,7 +107,8 @@ class IIPreActBasicBlock(nn.Module):
         self.conv1 = conv3x3(inplanes * 2, planes, stride)
         self.bn2 = norm_func(planes)
         self.conv2 = conv3x3(planes, planes)
-        self.norml = norm_func(planes)
+        if not identity_mapping:
+            self.norml = norm_func(planes)
         self.downsample = downsample
         self.stride = stride
 
