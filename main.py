@@ -56,6 +56,8 @@ parser.add_argument('--norm_func', default='batch', choices=get_norm_func().keys
                     help='normalization function for resnet block')
 parser.add_argument("--identity_mapping", action="store_true", 
                         help="residual path is clear as in PreResNet") 
+parser.add_argument("--inplanes", type=int, default=16,
+                        help="width of the model") 
 
 best_prec = 0
 train_global_it = 0
@@ -94,7 +96,8 @@ def main():
         # model = resnet110_cifar()
         model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
                                             norm_func=args.norm_func, 
-                                            identity_mapping=args.identity_mapping)
+                                            identity_mapping=args.identity_mapping,
+                                            inplanes=args.inplanes)
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -151,6 +154,8 @@ def main():
         logging('    - {} : {}'.format(k, v))
     logging('=' * 100)
     logging(f'#params = {args.n_all_param}')
+
+    logging(str(model))
 
     # Data loading and preprocessing
     # CIFAR10
@@ -330,7 +335,7 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0 and isinstance(model, WTIIPreAct_ResNet_Cifar):
+            if i == 0 and isinstance(model.module, WTIIPreAct_ResNet_Cifar):
                 _, diffs = model.module(input[:1, ...], debug=True)
                 if diffs is not None: # if batch size is correct
                     info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
