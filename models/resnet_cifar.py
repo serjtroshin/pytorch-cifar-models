@@ -338,18 +338,19 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         norm_func=kwargs.get("norm_func", "inst")
         wnorm=kwargs.get("wnorm", False) # weight normalization
         self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
+        self.inplanes=kwargs.get("inplanes", 16)
+        inplanes = self.inplanes
 
         self.norm_func = get_norm_func()[norm_func]
 
-        self.inplanes = 16
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1 = self._make_layer(block, 16, layers[0])
-        self.layer2 = self._make_layer(block, 32, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 64, layers[2], stride=2)
-        self.bn = self.norm_func(64*block.expansion)
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.layer1 = self._make_layer(block, inplanes, layers[0])
+        self.layer2 = self._make_layer(block, inplanes*2, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, inplanes*4, layers[2], stride=2)
+        self.bn = self.norm_func(inplanes*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
-        self.fc = nn.Linear(64*block.expansion, num_classes)
+        self.fc = nn.Linear(inplanes*4*block.expansion, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -468,10 +469,14 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_resnet110_cifar(wnorm=True)
-    y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
+    net = wtii_preact_resnet110_cifar(wnorm=True, inplanes=32 + 10)
+    #net = preact_resnet110_cifar()
+
+    y = net(torch.randn(1, 3, 32, 32))
     print(net)
     print(y.size())
-    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-    print("\n".join(map(str, info.items())))
+    n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
+    print(f'#params = {n_all_param}')
+    #info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+    #print("\n".join(map(str, info.items())))
 
