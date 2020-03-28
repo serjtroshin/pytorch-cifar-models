@@ -13,7 +13,7 @@ import sys
 
 sys.path.append('../')
 from utils.utils import Sequential
-from utils.optimization import weight_norm
+from utils.optimization import weight_norm, VariationalDropout
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -100,8 +100,10 @@ class IIPreActBasicBlock(nn.Module):
     expansion = 1
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, 
-                    norm_func=nn.InstanceNorm2d, identity_mapping=False):
+                    norm_func=nn.InstanceNorm2d, identity_mapping=False,
+                    dropout=0.0):
         super(IIPreActBasicBlock, self).__init__()
+        self.dropout = VariationalDropout(dropout) # input dropout
         self.bn1 = norm_func(inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.conv1 = conv3x3(inplanes * 2, planes, stride)
@@ -125,6 +127,8 @@ class IIPreActBasicBlock(nn.Module):
             self.conv2_fn.reset(self.conv2)
 
     def forward(self, z, x):
+        x = self.dropout(x)
+
         residual = z
         
         z = self.bn1(z)
@@ -135,8 +139,6 @@ class IIPreActBasicBlock(nn.Module):
             residual = self.downsample(z)
             x = self.downsample(x)
         
-       
-
         out = self.conv1(z_cat)
 
         out = self.bn2(out)
@@ -339,6 +341,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         wnorm=kwargs.get("wnorm", False) # weight normalization
         self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
         self.inplanes=kwargs.get("inplanes", 16)
+        self.dropout=kwargs.get("dropout", 0.0)
         inplanes = self.inplanes
 
         self.norm_func = get_norm_func()[norm_func]
@@ -377,10 +380,16 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample, norm_func=self.norm_func, identity_mapping=self.identity_mapping))
+        layers.append(block(self.inplanes, planes, stride, downsample, 
+                            norm_func=self.norm_func, 
+                            identity_mapping=self.identity_mapping,
+                            dropout=self.dropout))
         self.inplanes = planes*block.expansion
 
-        layers.append(block(self.inplanes, planes, norm_func=self.norm_func, identity_mapping=self.identity_mapping))
+        layers.append(block(self.inplanes, planes, 
+                            norm_func=self.norm_func, 
+                            identity_mapping=self.identity_mapping,
+                            dropout=self.dropout))
         for _ in range(2, blocks):
             layers.append(layers[-1]) # weight tieing
             

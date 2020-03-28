@@ -57,7 +57,9 @@ parser.add_argument('--norm_func', default='batch', choices=get_norm_func().keys
 parser.add_argument("--identity_mapping", action="store_true", 
                         help="residual path is clear as in PreResNet") 
 parser.add_argument("--inplanes", type=int, default=16,
-                        help="width of the model") 
+                        help="width of the model")
+parser.add_argument("--dropout", type=float, default=0.0,
+                        help="Variational dropout rate")
 
 best_prec = 0
 train_global_it = 0
@@ -97,7 +99,8 @@ def main():
         model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
                                             norm_func=args.norm_func, 
                                             identity_mapping=args.identity_mapping,
-                                            inplanes=args.inplanes)
+                                            inplanes=args.inplanes,
+                                            dropout=args.dropout)
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
