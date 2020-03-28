@@ -5,4 +5,6 @@ data/*
 .vscode
 nohup.out
 ResNetexps*/
+.ipynb_checkpoints/
+*.ipynb
 kill.sh

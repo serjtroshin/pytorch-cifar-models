@@ -1,3 +1,5 @@
+import torch
+from torch import nn
 from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 
@@ -71,3 +73,28 @@ class WeightNorm(object):
 def weight_norm(module, names, dim=0):
     fn = WeightNorm.apply(module, names, dim)
     return module, fn
+
+
+class VariationalDropout(nn.Module):
+    def __init__(self, dropout=0.0):
+        """
+        Variation dropout that applies the same mask at every layer
+        :param dropout: The dropout rate (0 means no dropout is applied)
+        """
+        super(VariationalDropout, self).__init__()
+        self.dropout = dropout
+        self.mask = None
+
+    def reset_mask(self, x):
+        dropout = self.dropout
+
+        m = torch.zeros_like(x).bernoulli_(1 - dropout)
+        mask = m.requires_grad_(False) / (1 - dropout)
+        self.mask = mask
+        return mask
+
+    def forward(self, x):
+        if not self.training or self.dropout == 0:
+            return x
+        assert self.mask is not None, "You need to reset mask before using VariationalHidDropout"
+        return self.mask * x
