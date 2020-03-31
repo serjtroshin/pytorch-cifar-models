@@ -96,11 +96,12 @@ def main():
         # model = resnet32_cifar()
         # model = resnet44_cifar()
         # model = resnet110_cifar()
-        model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
-                                            norm_func=args.norm_func, 
-                                            identity_mapping=args.identity_mapping,
-                                            inplanes=args.inplanes,
-                                            dropout=args.dropout)
+        # model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
+        #                                     norm_func=args.norm_func, 
+        #                                     identity_mapping=args.identity_mapping,
+        #                                     inplanes=args.inplanes,
+        #                                     dropout=args.dropout)
+        model = wtii_preact_parresnet110_cifar()
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -120,7 +121,7 @@ def main():
             os.makedirs(fdir)
 
         # adjust the lr according to the model type
-        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar)):
+        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
             model_type = 1
         elif isinstance(model, Wide_ResNet_Cifar):
             model_type = 2

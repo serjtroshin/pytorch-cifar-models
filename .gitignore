@@ -4,7 +4,7 @@ __pycache__
 data/*
 .vscode
 nohup.out
-ResNetexps*/
+ResNet*/
 .ipynb_checkpoints/
 *.ipynb
 kill.sh
