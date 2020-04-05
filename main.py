@@ -262,6 +262,7 @@ class AverageMeter(object):
 
 
 def train(trainloader, model, criterion, optimizer, epoch):
+    print("train loader", trainloader)
     global train_global_it
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -312,6 +313,7 @@ def train(trainloader, model, criterion, optimizer, epoch):
             
 
 def validate(val_loader, model, criterion):
+    print("val loader", val_loader)
     global test_global_it
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -338,10 +340,10 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0 and isinstance(model.module, WTIIPreAct_ResNet_Cifar):
+            if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
                 _, diffs = model.module(input[:1, ...], debug=True)
                 if diffs is not None: # if batch size is correct
-                    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+                    info = {"block" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
                     logging("DEBUG:" + "\n".join(map(str, info.items())))
 
             if i % args.print_freq == 0:

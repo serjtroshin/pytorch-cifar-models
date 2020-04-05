@@ -28,7 +28,7 @@ def deconv3x3(in_planes, out_planes, stride=1):
 def get_norm_func():
     return {
         "inst" : partial(nn.InstanceNorm2d, affine=False),
-        "batch" : partial(nn.BatchNorm2d, affine=False)
+        "batch" : partial(nn.BatchNorm2d, affine=False, track_running_stats=False)
     }
 
 class PreActBasicParBlock(nn.Module):
@@ -180,7 +180,9 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
     def _make_layer(self, transitions, stride=1):
         return Parallel(transitions)
 
-    def forward(self, x):
+    def forward(self, x, debug=False):
+        self.layer.reset()
+
         bs = x.shape[0]
         h, w = x.shape[2:]
 
@@ -191,7 +193,7 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         z3 = torch.zeros((bs, self.inplanes * 4, h // 4, w // 4), device=x.device)
 
         for i in range(self.layers):
-            x, [z1, z2, z3] = self.layer(x, [z1, z2, z3])
+            x, [z1, z2, z3] = self.layer(x, [z1, z2, z3], debug=debug)
         z = z3
 
         z = self.bn(z)
@@ -199,26 +201,26 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         z = self.avgpool(z)
         z = z.view(z.size(0), -1)
         z = self.fc(z)
+
+        if debug:
+            return z, self.layer.get_diffs()
         
         return z
 
 
 def wtii_preact_parresnet110_cifar(**kwargs):
-    model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, 3, **kwargs)
+    model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, 18, **kwargs)
     return model
 
 
 if __name__ == '__main__':
-    from torchviz import make_dot
     net = wtii_preact_parresnet110_cifar(inplanes=16)
     #net = preact_resnet110_cifar()
-
-    y = net(torch.randn(1, 3, 32, 32))
-    make_dot(y).render("attached_3layers", format="svg")
+    y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
     print(y.size())
     n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
-    #info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-    #print("\n".join(map(str, info.items())))
+    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+    print("\n".join(map(str, info.items())))
 
