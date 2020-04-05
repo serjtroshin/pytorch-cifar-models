@@ -71,10 +71,9 @@ def main():
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        use_gpu = torch.cuda.is_available()
-    else:
+    if not torch.cuda.is_available():
         print("running in cpu mode!")
+    use_gpu = torch.cuda.is_available()
 
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)

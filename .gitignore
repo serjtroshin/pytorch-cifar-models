@@ -8,3 +8,5 @@ ResNet*/
 .ipynb_checkpoints/
 *.ipynb
 kill.sh
+run_sl.sh
+slurm*

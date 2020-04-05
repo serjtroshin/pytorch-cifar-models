@@ -43,9 +43,8 @@ class PreActBasicParBlock(nn.Module):
         self.conv2 = conv3x3(planes, planes)
         self.stride = stride
 
-    def forward(self, z, z_other):
+    def forward(self, z):
         residual = z
-        z = torch.cat([z, z_other], dim=1)
         
         out = self.bn1(z)
         out = self.relu(out)
@@ -147,9 +146,9 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
 
         self.transitions = [[None] * 3 for i in range (3)]
-        self.transitions[0][0] = self._make_cell(block, inplanes*1*4, inplanes)  # 32x32x16
-        self.transitions[1][1] = self._make_cell(block, inplanes*2*3, inplanes*2)  # 16x16x32
-        self.transitions[2][2] = self._make_cell(block, inplanes*4*3, inplanes*4)  #   8x8x64
+        self.transitions[0][0] = self._make_cell(block, inplanes*1, inplanes*1)  # 32x32x16
+        self.transitions[1][1] = self._make_cell(block, inplanes*2, inplanes*2)  # 16x16x32
+        self.transitions[2][2] = self._make_cell(block, inplanes*4, inplanes*4)  #   8x8x64
         self.transitions[0][1] = self._make_transition(down_block, inplanes, inplanes*2, 1)
         self.transitions[0][2] = self._make_transition(down_block, inplanes, inplanes*4, 2)
         self.transitions[1][2] = self._make_transition(down_block, inplanes*2, inplanes*4, 1)
@@ -205,15 +204,17 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
 
 
 def wtii_preact_parresnet110_cifar(**kwargs):
-    model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, 18, **kwargs)
+    model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, 3, **kwargs)
     return model
 
 
 if __name__ == '__main__':
+    from torchviz import make_dot
     net = wtii_preact_parresnet110_cifar(inplanes=16)
     #net = preact_resnet110_cifar()
 
     y = net(torch.randn(1, 3, 32, 32))
+    make_dot(y).render("attached_3layers", format="svg")
     print(net)
     print(y.size())
     n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
