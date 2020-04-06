@@ -58,11 +58,12 @@ class PreActBasicParBlock(nn.Module):
 
         return out
 
-class UpBlock(nn.Module):
+
+class TransitionBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2):
-        super(UpBlock, self).__init__()
+    def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2, transition_f=conv3x3):
+        super(TransitionBlock, self).__init__()
         inter_planes = (inplanes + planes) // 2
         inter_layers = layers - 2
         net = []
@@ -70,65 +71,41 @@ class UpBlock(nn.Module):
             net.extend([
                 norm_func(inplanes),
                 nn.ReLU(inplace=True),
-                deconv3x3(inplanes, planes, stride=2)
+                transition_f(inplanes, planes, stride=2)
             ])
         else:
             net.extend([
                 norm_func(inplanes),
                 nn.ReLU(inplace=True),
-                deconv3x3(inplanes, inter_planes, stride=2)
+                transition_f(inplanes, inter_planes, stride=2)
             ])
             for i in range(inter_layers):
                 net.extend([
                     norm_func(inter_planes),
                     nn.ReLU(inplace=True),
-                    deconv3x3(inter_planes, inter_planes, stride=2)
+                    transition_f(inter_planes, inter_planes, stride=2)
                 ])
             net.extend([
                 norm_func(inter_planes),
                 nn.ReLU(inplace=True),
-                deconv3x3(inter_planes, planes, stride=2)
+                transition_f(inter_planes, planes, stride=2)
             ])
         self.net = nn.Sequential(*net)
 
     def forward(self, z):
         return self.net(z)
 
-class DownBlock(nn.Module):
+class UpBlock(TransitionBlock):
     expansion = 1
-
     def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2):
-        super(DownBlock, self).__init__()
-        inter_planes = (inplanes + planes) // 2
-        inter_layers = layers - 2
-        net = []
-        if layers == 1:
-            net.extend([
-                norm_func(inplanes),
-                nn.ReLU(inplace=True),
-                conv3x3(inplanes, planes, stride=2)
-            ])
-        else:
-            net.extend([
-                norm_func(inplanes),
-                nn.ReLU(inplace=True),
-                conv3x3(inplanes, inter_planes, stride=2)
-            ])
-            for i in range(inter_layers):
-                net.extend([
-                    norm_func(inter_planes),
-                    nn.ReLU(inplace=True),
-                    conv3x3(inter_planes, inter_planes, stride=2)
-                ])
-            net.extend([
-                norm_func(inter_planes),
-                nn.ReLU(inplace=True),
-                conv3x3(inter_planes, planes, stride=2)
-            ])
-        self.net = nn.Sequential(*net)
+        super(UpBlock, self).__init__(inplanes, planes, norm_func, layers, 
+                                        transition_f=deconv3x3)
 
-    def forward(self, z):
-        return self.net(z)
+class DownBlock(TransitionBlock):
+    expansion = 1
+    def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2):
+        super(DownBlock, self).__init__(inplanes, planes, norm_func, layers, 
+                                        transition_f=conv3x3)
 
 
 class WTIIPreAct_ParResNet_Cifar(nn.Module):
