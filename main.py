@@ -77,7 +77,7 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
-    args.name += f"_norm_func{args.norm_func}_inplanes{args.inplanes}_track_running_stats{args.track_running_stats}"
+    args.name += f"_norm_func{args.norm_func}_inplanes{args.inplanes}_track_running_stats{args.track_running_stats}_wnorm{args.wnorm}"
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
     args.work_dir = os.path.join(args.work_dir, "{}-{}".format(args.name, time.strftime('%Y-%m-%d--%H-%M-%S')))
