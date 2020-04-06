@@ -43,6 +43,16 @@ class PreActBasicParBlock(nn.Module):
         self.conv2 = conv3x3(planes, planes)
         self.stride = stride
 
+    def wnorm(self):
+        self.conv1, self.conv1_fn = weight_norm(module=self.conv1, names=['weight'], dim=0)
+        self.conv2, self.conv2_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
+
+    def reset(self):
+        if 'conv1_fn' in self.__dict__:
+            self.conv1_fn.reset(self.conv1)
+        if 'conv2_fn' in self.__dict__:
+            self.conv2_fn.reset(self.conv2)
+
     def forward(self, z):
         residual = z
         
@@ -61,6 +71,19 @@ class PreActBasicParBlock(nn.Module):
 
 class TransitionBlock(nn.Module):
     expansion = 1
+
+    def wnorm(self):
+        for i, module in enumerate(self.net):
+            if isinstance(module, nn.Conv2d):
+                conv, conv_fn = weight_norm(module=module, names=['weight'], dim=0)
+                self.net[i] = conv
+                self.net[i]._fn = conv_fn
+
+    def reset(self):
+        for i, module in enumerate(self.net):
+            if isinstance(module, nn.Conv2d):
+                if '_fn' in self.net[i].__dict__:
+                   module._fn.reset(module)
 
     def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2, transition_f=conv3x3):
         super(TransitionBlock, self).__init__()
@@ -115,7 +138,7 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
 
         track_running_stats=kwargs.get("track_running_stats", False)
         self.norm_func=partial(get_norm_func()[kwargs.get("norm_func", "batch")], track_running_stats=track_running_stats)
-        # wnorm=kwargs.get("wnorm", False) # weight normalization
+        wnorm=kwargs.get("wnorm", False) # weight normalization
         # self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
         self.inplanes=kwargs.get("inplanes", 16)
 
@@ -150,6 +173,9 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
             #elif isinstance(m, nn.BatchNorm2d):
             #    m.weight.data.fill_(1)
             #    m.bias.data.zero_()
+        
+        if wnorm:
+            self.wnorm()
 
     def _make_cell(self, block, inplanes, planes):
         return block(inplanes, planes, norm_func=self.norm_func)
@@ -159,6 +185,16 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
 
     def _make_layer(self, transitions, stride=1):
         return Parallel(transitions)
+
+    def wnorm(self):
+        for row in self.transitions:
+            for elem in row:
+                elem.wnorm()
+
+    def reset(self):
+        for row in self.transitions:
+            for elem in row:
+                elem.reset()
 
     def forward(self, x, debug=False):
         self.layer.reset()
@@ -172,6 +208,7 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         z2 = torch.zeros((bs, self.inplanes * 2, h // 2, w // 2), device=x.device)
         z3 = torch.zeros((bs, self.inplanes * 4, h // 4, w // 4), device=x.device)
 
+        self.reset()
         for i in range(self.layers):
             x, [z1, z2, z3] = self.layer(x, [z1, z2, z3], debug=debug)
         z = z3
@@ -194,7 +231,7 @@ def wtii_preact_parresnet110_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet110_cifar(inplanes=47)
+    net = wtii_preact_parresnet110_cifar(inplanes=47, wnorm=True)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
