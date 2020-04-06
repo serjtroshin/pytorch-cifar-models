@@ -28,7 +28,7 @@ def deconv3x3(in_planes, out_planes, stride=1):
 def get_norm_func():
     return {
         "inst" : partial(nn.InstanceNorm2d, affine=False),
-        "batch" : partial(nn.BatchNorm2d, affine=False, track_running_stats=False)
+        "batch" : partial(nn.BatchNorm2d, affine=False)
     }
 
 class PreActBasicParBlock(nn.Module):
@@ -136,12 +136,15 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
     def __init__(self, block, down_block, up_block, layers, num_classes=10, **kwargs):
         super(WTIIPreAct_ParResNet_Cifar, self).__init__()
 
-        self.inplanes = 16
+        track_running_stats=kwargs.get("track_running_stats", False)
+        self.norm_func=partial(get_norm_func()[kwargs.get("norm_func", "batch")], track_running_stats=track_running_stats)
+        # wnorm=kwargs.get("wnorm", False) # weight normalization
+        # self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
+        self.inplanes=kwargs.get("inplanes", 16)
+
         inplanes = self.inplanes
 
         self.layers = layers
-
-        self.norm_func = get_norm_func()["batch"]
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
 
@@ -214,7 +217,7 @@ def wtii_preact_parresnet110_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet110_cifar(inplanes=16)
+    net = wtii_preact_parresnet110_cifar(inplanes=47)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)

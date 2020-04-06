@@ -60,6 +60,8 @@ parser.add_argument("--inplanes", type=int, default=16,
                         help="width of the model")
 parser.add_argument("--dropout", type=float, default=0.0,
                         help="Variational dropout rate")
+parser.add_argument("--track_running_stats", action="store_true",
+                        help="Variational dropout rate")                        
 
 best_prec = 0
 train_global_it = 0
@@ -75,6 +77,7 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
+    args.name += f"_norm_func{args.norm_func}_inplanes{args.inplanes}_track_running_stats{args.track_running_stats}"
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
     args.work_dir = os.path.join(args.work_dir, "{}-{}".format(args.name, time.strftime('%Y-%m-%d--%H-%M-%S')))
@@ -100,7 +103,11 @@ def main():
         #                                     identity_mapping=args.identity_mapping,
         #                                     inplanes=args.inplanes,
         #                                     dropout=args.dropout)
-        model = wtii_preact_parresnet110_cifar()
+        model = wtii_preact_parresnet110_cifar(wnorm=args.wnorm, 
+                                               norm_func=args.norm_func, 
+                                               identity_mapping=args.identity_mapping,
+                                               inplanes=args.inplanes,
+                                               track_running_stats=args.track_running_stats)
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
