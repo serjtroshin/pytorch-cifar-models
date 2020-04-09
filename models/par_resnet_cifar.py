@@ -225,8 +225,8 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         return z
 
 
-def wtii_preact_parresnet110_cifar(**kwargs):
-    model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, 18, **kwargs)
+def wtii_preact_parresnet110_cifar(layers=18, **kwargs):
+    model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, layers, **kwargs)
     return model
 
 

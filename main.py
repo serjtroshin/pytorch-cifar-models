@@ -38,7 +38,9 @@ parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N',
                     help='mini-batch size (default: 128),only used for train')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', 
                     help='initial learning rate')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
+parser.add_argument('--optimizer', default="sgd", choices=["adam", "sgd"],
+                    help='optimizer type')                
+parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum (sgd)')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', 
                     help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', 
@@ -61,7 +63,9 @@ parser.add_argument("--inplanes", type=int, default=16,
 parser.add_argument("--dropout", type=float, default=0.0,
                         help="Variational dropout rate")
 parser.add_argument("--track_running_stats", action="store_true",
-                        help="Variational dropout rate")                        
+                        help="Variational dropout rate")
+parser.add_argument("--layers", type=int, default=18,
+                        help="layers (aka blocks) of WT model")                                    
 
 best_prec = 0
 train_global_it = 0
@@ -77,7 +81,12 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
-    args.name += f"_norm_func{args.norm_func}_inplanes{args.inplanes}_track_running_stats{args.track_running_stats}_wnorm{args.wnorm}"
+    args.name += f"_norm_func{args.norm_func}" \
+              +  f"_inplanes{args.inplanes}" \
+              +  f"_track_running_stats{args.track_running_stats}" \
+              +  f"_wnorm{args.wnorm}" \
+              +  f"_layers{args.layers}" \
+              +  f"_optim{args.optimizer}"
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
     args.work_dir = os.path.join(args.work_dir, "{}-{}".format(args.name, time.strftime('%Y-%m-%d--%H-%M-%S')))
@@ -107,7 +116,8 @@ def main():
                                                norm_func=args.norm_func, 
                                                identity_mapping=args.identity_mapping,
                                                inplanes=args.inplanes,
-                                               track_running_stats=args.track_running_stats)
+                                               track_running_stats=args.track_running_stats,
+                                               layers=args.layers)
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -139,7 +149,10 @@ def main():
 
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
-        optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        if args.optimizer == "sgd":
+            optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        elif args.optimizer == "adam":
+            optimizer = optim.Adam(model.parameters(), lr=args.lr)
         cudnn.benchmark = True
     else:
         logging('Cuda is not available!')
