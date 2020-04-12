@@ -9,7 +9,7 @@ import os
 from scipy.optimize import root
 import time
 import copy
-from modules.broyden import broyden, analyze_broyden
+from models.deq_models.deq_modules.broyden import broyden, analyze_broyden
 
 
 class RootFind(Function):
@@ -41,10 +41,36 @@ class RootFind(Function):
     def forward(ctx, func, z1ss, uss, z0, *args):
         bsz, d_model, seq_len = z1ss.size()
         eps = 1e-6 * np.sqrt(bsz * seq_len * d_model)
+        threshold = args[-2]    # Can also set this to be different, based on training/inference
+        train_step = args[-1]
+        debug = args[-3]
         root_find = RootFind.broyden_find_root
         ctx.args_len = len(args)
+        def norm(z):
+            mn = 0
+            sig = z.std()
+            return (z - mn) / sig
+        def cosine(z1, z2):
+            return (z1 * z2).sum() / (z1 * z1).sum()**0.5 / (z2 * z2).sum()**0.5
         with torch.no_grad():
-            z1ss_est = root_find(func, z1ss, uss, z0, eps, *args)   # args include pos_emb, threshold, train_step
+            # z1ss_est = root_find(func, z1ss, uss, z0, eps, *args)   # args include pos_emb, threshold, train_step
+            #z_init = func(z1ss, uss, z0)
+            #z_30 = None
+            for i in range(100): # todo
+                
+                z1ss = func(z1ss, uss, z0, debug=debug)
+                # if i == 30:
+                #     z_30 = z1ss
+                # print(f"diff = {(z1ss - func(z1ss, uss, z0)).norm(p=2)}")
+                # print(f"diff normed = {(norm(z1ss) - norm(func(z1ss, uss, z0))).norm(p=2)}")
+                # print(f"diff cosine = {cosine(norm(z1ss), norm(func(z1ss, uss, z0)))}")
+                # print(f"diff cosine not normed = {cosine(z1ss, func(z1ss, uss, z0))}")
+                # print(f"diff cosine from init = {cosine(norm(z1ss), norm(z_init))}")
+                # if z_30 is not None:
+                #     print(f"diff cosine from z30 = {cosine(norm(z1ss), norm(z_30))}")
+            z1ss_est = z1ss
+            # print(f"diff final = {(z1ss_est - func(z1ss_est, uss, z0)).norm()}")
+
 
             # If one would like to analyze the convergence process (e.g., failures, stability), should
             # insert here or in broyden_find_root.
@@ -101,7 +127,7 @@ class DEQModule(nn.Module):
             func = ctx.func
             z1ss = z1ss.clone().detach().requires_grad_()
             uss = uss.clone().detach()
-            z0 = z0.clone().detach()
+            # z0 = z0.clone().detach()
 
             with torch.enable_grad():
                 y = RootFind.g(func, z1ss, uss, z0, *args)

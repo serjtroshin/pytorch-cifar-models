@@ -81,6 +81,7 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
+
     args.name += f"_norm_func{args.norm_func}" \
               +  f"_inplanes{args.inplanes}" \
               +  f"_track_running_stats{args.track_running_stats}" \
@@ -100,6 +101,12 @@ def main():
     # Model building
     logging('=> Building model...')
     if use_gpu:
+        import multiprocessing as mp 
+        mp.set_start_method('spawn')
+        # https://github.com/pytorch/pytorch/issues/2517
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        torch.cuda.manual_seed_all(args.seed)
+
         # model can be set to anyone that I have defined in models folder
         # note the model should match to the cifar type !
 
@@ -112,12 +119,13 @@ def main():
         #                                     identity_mapping=args.identity_mapping,
         #                                     inplanes=args.inplanes,
         #                                     dropout=args.dropout)
-        model = wtii_preact_parresnet110_cifar(wnorm=args.wnorm, 
-                                               norm_func=args.norm_func, 
-                                               identity_mapping=args.identity_mapping,
-                                               inplanes=args.inplanes,
-                                               track_running_stats=args.track_running_stats,
-                                               layers=args.layers)
+        # model = wtii_preact_parresnet110_cifar(wnorm=args.wnorm, 
+        #                                        norm_func=args.norm_func, 
+        #                                        identity_mapping=args.identity_mapping,
+        #                                        inplanes=args.inplanes,
+        #                                        track_running_stats=args.track_running_stats,
+        #                                        layers=args.layers)
+        model = deq_parresnet110_cifar(18, pretrain_steps=10, n_layer=3, )
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -137,7 +145,7 @@ def main():
             os.makedirs(fdir)
 
         # adjust the lr according to the model type
-        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar, DEQParResNet)):
             model_type = 1
         elif isinstance(model, Wide_ResNet_Cifar):
             model_type = 2
@@ -298,7 +306,7 @@ def train(trainloader, model, criterion, optimizer, epoch):
 
         input, target = input.cuda(), target.cuda()
         # compute output
-        output = model(input)
+        output = model(input, train_step=train_global_it)
         loss = criterion(output, target)
 
         # measure accuracy and record loss

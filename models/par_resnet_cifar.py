@@ -34,7 +34,7 @@ def get_norm_func():
 class PreActBasicParBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, norm_func=nn.BatchNorm2d):
+    def __init__(self, inplanes, planes, stride=1, norm_func=nn.BatchNorm2d, identity_mapping=False):
         super(PreActBasicParBlock, self).__init__()
         self.bn1 = norm_func(inplanes)
         self.relu = nn.ReLU(inplace=True)
@@ -42,6 +42,11 @@ class PreActBasicParBlock(nn.Module):
         self.bn2 = norm_func(planes)
         self.conv2 = conv3x3(planes, planes)
         self.stride = stride
+
+        self.identity_mapping = identity_mapping
+
+        if not self.identity_mapping:
+            self.norml = norm_func(planes)
 
     def wnorm(self):
         self.conv1, self.conv1_fn = weight_norm(module=self.conv1, names=['weight'], dim=0)
@@ -65,6 +70,10 @@ class PreActBasicParBlock(nn.Module):
         out = self.conv2(out)
 
         out += residual
+
+        if not self.identity_mapping:
+            out = self.norml(out)
+
 
         return out
 
