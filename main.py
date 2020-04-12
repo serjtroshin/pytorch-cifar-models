@@ -65,7 +65,17 @@ parser.add_argument("--dropout", type=float, default=0.0,
 parser.add_argument("--track_running_stats", action="store_true",
                         help="Variational dropout rate")
 parser.add_argument("--layers", type=int, default=18,
-                        help="layers (aka blocks) of WT model")                                    
+                        help="layers (aka blocks) of WT model")          
+
+parser.add_argument('--n_layer', type=int, default=12,
+                    help='number of total layers')
+parser.add_argument('--f_thres', type=int, default=50,
+                    help='forward pass Broyden threshold')
+parser.add_argument('--b_thres', type=int, default=80,
+                    help='backward pass Broyden threshold')
+parser.add_argument('--pretrain_steps', type=int, default=10000,
+                    help='number of pretrain steps')
+                          
 
 best_prec = 0
 train_global_it = 0
@@ -81,12 +91,13 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
-
     args.name += f"_norm_func{args.norm_func}" \
               +  f"_inplanes{args.inplanes}" \
               +  f"_track_running_stats{args.track_running_stats}" \
               +  f"_wnorm{args.wnorm}" \
-              +  f"_layers{args.layers}" \
+              +  f"pretrain_steps{args.pretrain_steps}" \
+              +  f"n_layer{args.n_layer}" \
+              +  f"f_thres{args.f_thres}" \
               +  f"_optim{args.optimizer}"
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
@@ -125,7 +136,10 @@ def main():
         #                                        inplanes=args.inplanes,
         #                                        track_running_stats=args.track_running_stats,
         #                                        layers=args.layers)
-        model = deq_parresnet110_cifar(18, pretrain_steps=10, n_layer=3, )
+        model = deq_parresnet110_cifar(18, 
+                                        pretrain_steps=args.pretrain_steps, 
+                                        n_layer=args.n_layer, 
+                                        )
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -306,7 +320,8 @@ def train(trainloader, model, criterion, optimizer, epoch):
 
         input, target = input.cuda(), target.cuda()
         # compute output
-        output = model(input, train_step=train_global_it)
+        output = model(input, train_step=train_global_it, f_thres=args.f_thres,
+                                        b_thres=args.b_thres)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -356,7 +371,8 @@ def validate(val_loader, model, criterion):
             input, target = input.cuda(), target.cuda()
 
             # compute output
-            output = model(input)
+            output = model(input, f_thres=args.f_thres,
+                                        b_thres=args.b_thres)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
@@ -369,10 +385,9 @@ def validate(val_loader, model, criterion):
             end = time.time()
 
             if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
-                _, diffs = model.module(input[:1, ...], debug=True)
-                if diffs is not None: # if batch size is correct
-                    info = {"block" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-                    logging("DEBUG:" + "\n".join(map(str, info.items())))
+                _, debug_info = model.module(input[:1, ...], debug=True)
+                if debug_info is not None: # if batch size is correct
+                    logging("DEBUG:" + debug_info)
 
             if i % args.print_freq == 0:
                 logging('Test: [{0}/{1}]\t'

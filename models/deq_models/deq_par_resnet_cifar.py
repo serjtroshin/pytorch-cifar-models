@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../../..")
+sys.path.append("../../")
 from models.deq_models.deq_modules.deq import *
 
 from models.par_resnet_cifar import *
@@ -65,7 +65,7 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
         h, w = x.shape[2:]
         return [(bs, self.inplanes, h, w), (bs, self.inplanes * 2, h // 2, w // 2), (bs, self.inplanes * 4, h // 4, w // 4)]
 
-    def forward(self, x, f_thres=18, train_step=-1, debug=False):
+    def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False):
         self.layer.reset()
 
         bs = x.shape[0]
@@ -100,7 +100,12 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
         z = self.fc(z)
 
         if debug:
-            return z, self.layer.get_diffs()
+            if len(self.layer.get_diffs()) == 0:
+                return z, self.layer._result_info
+            diffs = self.layer.get_diffs()
+            info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+            debug_info = "\n".join(map(str, info.items()))
+            return z, debug_info
         
         return z
         
@@ -109,9 +114,8 @@ def deq_parresnet110_cifar(layers=18, **kwargs):
     return model
 
 if __name__=="__main__":
-    net = deq_parresnet110_cifar(18, pretrain_steps=10, n_layer=3)
+    net = deq_parresnet110_cifar(18, pretrain_steps=-1, n_layer=3)
     x = torch.randn(1, 3, 32, 32)
-    y, diffs = net(x, train_step=0, debug=True)
-    print(y.shape)
-    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-    print("\n".join(map(str, info.items())))
+    y, debug_info = net(x, train_step=-1, debug=True, f_thres=50)
+
+    print(debug_info)

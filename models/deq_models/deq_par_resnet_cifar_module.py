@@ -17,12 +17,12 @@ class ParResNetDEQModule(DEQModule):
     def forward(self, z1s, us, z0, **kwargs):
         bsz, total_hsize, seq_len = z1s.size()
         train_step = kwargs.get('train_step', -1)
-        threshold = kwargs.get('threshold', 18)
+        threshold = kwargs.get('threshold', None)
         debug = kwargs.get('debug', False)
 
         if us is None:
             raise ValueError("Input injection is required.")
-
+        assert threshold == 50, threshold
         z1s_out = RootFind.apply(self.func, z1s, us, z0, debug, threshold, train_step)
         if self.training:
             z1s_out = RootFind.f(self.func, z1s_out, us, z0, threshold, train_step)

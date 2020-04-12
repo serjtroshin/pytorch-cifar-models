@@ -41,4 +41,4 @@
 # --norm_func inst --inplanes 47 --name parallel --work_dir ResNetParexpall
 
 sbatch -c 4 -G 1 run.sh --epoch 160 --batch-size 128 --optimizer sgd -ct 10 \
---name deqparallel --work_dir ResNetParexpdeq
+--name deqparallel --work_dir experiments/DEQparallel

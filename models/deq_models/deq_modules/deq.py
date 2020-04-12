@@ -32,13 +32,16 @@ class RootFind(Function):
         g = lambda x: RootFind.g(func, x, uss, z0, *args)
         result_info = broyden(g, z1ss_est, threshold=threshold, eps=eps, name="forward")
         z1ss_est = result_info['result']
+        func.layer._result_info = str(result_info)
             
         if threshold > 100:
             torch.cuda.empty_cache()
         return z1ss_est.clone().detach()
 
     @staticmethod
-    def forward(ctx, func, z1ss, uss, z0, *args):
+    def forward(ctx, func, z1ss, uss, z0, *args, **kwargs):
+        use_broyden = kwargs.get("method", True)
+
         bsz, d_model, seq_len = z1ss.size()
         eps = 1e-6 * np.sqrt(bsz * seq_len * d_model)
         threshold = args[-2]    # Can also set this to be different, based on training/inference
@@ -53,23 +56,13 @@ class RootFind(Function):
         def cosine(z1, z2):
             return (z1 * z2).sum() / (z1 * z1).sum()**0.5 / (z2 * z2).sum()**0.5
         with torch.no_grad():
-            # z1ss_est = root_find(func, z1ss, uss, z0, eps, *args)   # args include pos_emb, threshold, train_step
-            #z_init = func(z1ss, uss, z0)
-            #z_30 = None
-            for i in range(100): # todo
-                
-                z1ss = func(z1ss, uss, z0, debug=debug)
-                # if i == 30:
-                #     z_30 = z1ss
-                # print(f"diff = {(z1ss - func(z1ss, uss, z0)).norm(p=2)}")
-                # print(f"diff normed = {(norm(z1ss) - norm(func(z1ss, uss, z0))).norm(p=2)}")
-                # print(f"diff cosine = {cosine(norm(z1ss), norm(func(z1ss, uss, z0)))}")
-                # print(f"diff cosine not normed = {cosine(z1ss, func(z1ss, uss, z0))}")
-                # print(f"diff cosine from init = {cosine(norm(z1ss), norm(z_init))}")
-                # if z_30 is not None:
-                #     print(f"diff cosine from z30 = {cosine(norm(z1ss), norm(z_30))}")
-            z1ss_est = z1ss
-            # print(f"diff final = {(z1ss_est - func(z1ss_est, uss, z0)).norm()}")
+            if use_broyden:
+                z1ss_est = root_find(func, z1ss, uss, z0, eps, *args)   # args include pos_emb, threshold, train_step
+            else:
+                for i in range(threshold): # todo
+                    
+                    z1ss = func(z1ss, uss, z0, debug=debug)
+                z1ss_est = z1ss
 
 
             # If one would like to analyze the convergence process (e.g., failures, stability), should

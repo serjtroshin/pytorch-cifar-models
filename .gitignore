@@ -11,3 +11,5 @@ kill.sh
 run_sl.sh
 slurm*
 *.svg
+tmp*/
+experiments/
