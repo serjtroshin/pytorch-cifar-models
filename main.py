@@ -38,7 +38,9 @@ parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N',
                     help='mini-batch size (default: 128),only used for train')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', 
                     help='initial learning rate')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
+parser.add_argument('--optimizer', default="sgd", choices=["adam", "sgd"],
+                    help='optimizer type')                
+parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum (sgd)')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', 
                     help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', 
@@ -60,6 +62,20 @@ parser.add_argument("--inplanes", type=int, default=16,
                         help="width of the model")
 parser.add_argument("--dropout", type=float, default=0.0,
                         help="Variational dropout rate")
+parser.add_argument("--track_running_stats", action="store_true",
+                        help="Variational dropout rate")
+parser.add_argument("--layers", type=int, default=18,
+                        help="layers (aka blocks) of WT model")          
+
+parser.add_argument('--n_layer', type=int, default=12,
+                    help='number of total layers')
+parser.add_argument('--f_thres', type=int, default=50,
+                    help='forward pass Broyden threshold')
+parser.add_argument('--b_thres', type=int, default=80,
+                    help='backward pass Broyden threshold')
+parser.add_argument('--pretrain_steps', type=int, default=10000,
+                    help='number of pretrain steps')
+                          
 
 best_prec = 0
 train_global_it = 0
@@ -71,11 +87,18 @@ def main():
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        use_gpu = torch.cuda.is_available()
-    else:
+    if not torch.cuda.is_available():
         print("running in cpu mode!")
+    use_gpu = torch.cuda.is_available()
 
+    args.name += f"_norm_func{args.norm_func}" \
+              +  f"_inplanes{args.inplanes}" \
+              +  f"_track_running_stats{args.track_running_stats}" \
+              +  f"_wnorm{args.wnorm}" \
+              +  f"pretrain_steps{args.pretrain_steps}" \
+              +  f"n_layer{args.n_layer}" \
+              +  f"f_thres{args.f_thres}" \
+              +  f"_optim{args.optimizer}"
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
     args.work_dir = os.path.join(args.work_dir, "{}-{}".format(args.name, time.strftime('%Y-%m-%d--%H-%M-%S')))
@@ -89,6 +112,12 @@ def main():
     # Model building
     logging('=> Building model...')
     if use_gpu:
+        import multiprocessing as mp 
+        mp.set_start_method('spawn')
+        # https://github.com/pytorch/pytorch/issues/2517
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        torch.cuda.manual_seed_all(args.seed)
+
         # model can be set to anyone that I have defined in models folder
         # note the model should match to the cifar type !
 
@@ -96,11 +125,21 @@ def main():
         # model = resnet32_cifar()
         # model = resnet44_cifar()
         # model = resnet110_cifar()
-        model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
-                                            norm_func=args.norm_func, 
-                                            identity_mapping=args.identity_mapping,
-                                            inplanes=args.inplanes,
-                                            dropout=args.dropout)
+        # model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
+        #                                     norm_func=args.norm_func, 
+        #                                     identity_mapping=args.identity_mapping,
+        #                                     inplanes=args.inplanes,
+        #                                     dropout=args.dropout)
+        # model = wtii_preact_parresnet110_cifar(wnorm=args.wnorm, 
+        #                                        norm_func=args.norm_func, 
+        #                                        identity_mapping=args.identity_mapping,
+        #                                        inplanes=args.inplanes,
+        #                                        track_running_stats=args.track_running_stats,
+        #                                        layers=args.layers)
+        model = deq_parresnet110_cifar(18, 
+                                        pretrain_steps=args.pretrain_steps, 
+                                        n_layer=args.n_layer, 
+                                        )
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)
@@ -120,7 +159,7 @@ def main():
             os.makedirs(fdir)
 
         # adjust the lr according to the model type
-        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar)):
+        if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar, DEQParResNet)):
             model_type = 1
         elif isinstance(model, Wide_ResNet_Cifar):
             model_type = 2
@@ -132,7 +171,10 @@ def main():
 
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
-        optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        if args.optimizer == "sgd":
+            optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        elif args.optimizer == "adam":
+            optimizer = optim.Adam(model.parameters(), lr=args.lr)
         cudnn.benchmark = True
     else:
         logging('Cuda is not available!')
@@ -262,6 +304,7 @@ class AverageMeter(object):
 
 
 def train(trainloader, model, criterion, optimizer, epoch):
+    print("train loader", trainloader)
     global train_global_it
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -277,7 +320,8 @@ def train(trainloader, model, criterion, optimizer, epoch):
 
         input, target = input.cuda(), target.cuda()
         # compute output
-        output = model(input)
+        output = model(input, train_step=train_global_it, f_thres=args.f_thres,
+                                        b_thres=args.b_thres)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -312,6 +356,7 @@ def train(trainloader, model, criterion, optimizer, epoch):
             
 
 def validate(val_loader, model, criterion):
+    print("val loader", val_loader)
     global test_global_it
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -326,7 +371,8 @@ def validate(val_loader, model, criterion):
             input, target = input.cuda(), target.cuda()
 
             # compute output
-            output = model(input)
+            output = model(input, f_thres=args.f_thres,
+                                        b_thres=args.b_thres)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
@@ -338,11 +384,10 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0 and isinstance(model.module, WTIIPreAct_ResNet_Cifar):
-                _, diffs = model.module(input[:1, ...], debug=True)
-                if diffs is not None: # if batch size is correct
-                    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-                    logging("DEBUG:" + "\n".join(map(str, info.items())))
+            if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+                _, debug_info = model.module(input[:1, ...], debug=True)
+                if debug_info is not None: # if batch size is correct
+                    logging("DEBUG:" + debug_info)
 
             if i % args.print_freq == 0:
                 logging('Test: [{0}/{1}]\t'
