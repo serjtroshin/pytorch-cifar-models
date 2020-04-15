@@ -12,7 +12,7 @@ import math
 import sys
 
 sys.path.append('../')
-from utils.utils import Sequential
+from utils.utils import SequentialLayer
 from utils.optimization import weight_norm, VariationalDropout
 
 
@@ -347,9 +347,9 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.norm_func = get_norm_func()[norm_func]
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1 = self._make_layer(block, inplanes, layers[0])
-        self.layer2 = self._make_layer(block, inplanes*2, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, inplanes*4, layers[2], stride=2)
+        self.down01, self.layer1 = self._make_layer(block, inplanes, layers[0])
+        self.down12, self.layer2 = self._make_layer(block, inplanes*2, layers[1], stride=2)
+        self.down23, self.layer3 = self._make_layer(block, inplanes*4, layers[2], stride=2)
         self.bn = self.norm_func(inplanes*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
@@ -368,6 +368,9 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
     def wnorm(self):
         # wnorm
+        self.down01.wnorm()
+        self.down12.wnorm()
+        self.down23.wnorm()
         self.layer1.wnorm()
         self.layer2.wnorm()
         self.layer3.wnorm()
@@ -386,23 +389,34 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
                             dropout=self.dropout))
         self.inplanes = planes*block.expansion
 
-        layers.append(block(self.inplanes, planes, 
+        layers.append(SequentialLayer(
+                        block(self.inplanes, planes, 
                             norm_func=self.norm_func, 
                             identity_mapping=self.identity_mapping,
-                            dropout=self.dropout))
-        for _ in range(2, blocks):
-            layers.append(layers[-1]) # weight tieing
+                            dropout=self.dropout)))
+        layers[1].layers = blocks - 1
             
-        return Sequential(*layers)
+        return layers
 
     def forward(self, x, debug=False):
 
         x = self.conv1(x)
         z = torch.zeros_like(x)
 
-        (z, x), info1 = self.layer1(z, x, debug=debug)
-        (z, x), info2 = self.layer2(z, x, debug=debug)
-        (z, x), info3 = self.layer3(z, x, debug=debug)
+        (z, x) = self.down01(z, x)
+        self.layer1.reset()
+        for i in range(self.layer1.layers):
+            (z, x) = self.layer1(z, x, debug=debug)
+
+        (z, x) = self.down12(z, x)
+        self.layer2.reset()
+        for i in range(self.layer2.layers):
+            (z, x) = self.layer2(z, x, debug=debug)
+
+        (z, x) = self.down23(z, x)
+        self.layer3.reset()
+        for i in range(self.layer3.layers):
+            (z, x) = self.layer3(z, x, debug=debug)
 
         z = self.bn(z)
         z = self.relu(z)
@@ -412,7 +426,9 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         
         if not debug:
             return z
-        
+        info1 = self.layer1.get_diffs()
+        info2 = self.layer2.get_diffs()
+        info3 = self.layer3.get_diffs()
         return z, [info1, info2, info3]
 
 
@@ -479,13 +495,13 @@ def preact_resnet1001_cifar(**kwargs):
 
 if __name__ == '__main__':
     net = wtii_preact_resnet110_cifar(wnorm=True, inplanes=32 + 10)
-    #net = preact_resnet110_cifar()
+    # net = preact_resnet110_cifar()
 
-    y = net(torch.randn(1, 3, 32, 32))
+    y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
     print(y.size())
     n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
-    #info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-    #print("\n".join(map(str, info.items())))
+    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+    print("\n".join(map(str, info.items())))
 
