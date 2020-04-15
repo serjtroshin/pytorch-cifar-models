@@ -25,3 +25,25 @@ class Sequential(nn.Sequential):
         if debug:
             return input, self.meter.diffs
         return input, None
+
+
+class SequentialLayer(nn.Module):
+    def __init__(self, layer):
+        super(SequentialLayer, self).__init__()
+        self.meter = ConvergenceMeter()
+        self.layer = layer
+
+    def reset(self):
+        self.meter.reset()
+
+    def wnorm(self):
+        self.layer.wnorm()
+
+    def get_diffs(self):
+        return self.meter.diffs
+
+    def forward(self, *input, debug=False):
+        input = self.layer(*input)
+        if debug:
+            self.meter.update(input[0])
+        return input

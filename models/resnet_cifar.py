@@ -334,7 +334,7 @@ class PreAct_ResNet_Cifar(nn.Module):
 
 class WTIIPreAct_ResNet_Cifar(nn.Module):
 
-    def __init__(self, block, layers, num_classes=10, **kwargs):
+    def __init__(self, block, layers, num_classes=10, copy_layers=False, **kwargs):
         super(WTIIPreAct_ResNet_Cifar, self).__init__()
 
         norm_func=kwargs.get("norm_func", "inst")
@@ -347,10 +347,16 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.norm_func = get_norm_func()[norm_func]
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
+        tmp = self.inplanes
         self.down01, self.layer1 = self._make_layer(block, inplanes, layers[0])
         self.down12, self.layer2 = self._make_layer(block, inplanes*2, layers[1], stride=2)
         self.down23, self.layer3 = self._make_layer(block, inplanes*4, layers[2], stride=2)
-        self.bn = self.norm_func(inplanes*block.expansion)
+        if copy_layers:
+            self.inplanes = tmp
+            _, self.layer1_copy = self._make_layer(block, inplanes, layers[0])
+            _, self.layer2_copy = self._make_layer(block, inplanes*2, layers[1], stride=2)
+            _, self.layer3_copy = self._make_layer(block, inplanes*4, layers[2], stride=2)
+        self.bn = self.norm_func(inplanes*4*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
         self.fc = nn.Linear(inplanes*4*block.expansion, num_classes)
@@ -368,6 +374,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
     def wnorm(self):
         # wnorm
+        raise NotImplemented # update for deq func_copy
         self.down01.wnorm()
         self.down12.wnorm()
         self.down23.wnorm()
@@ -383,6 +390,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
             )
 
         layers = []
+        
         layers.append(block(self.inplanes, planes, stride, downsample, 
                             norm_func=self.norm_func, 
                             identity_mapping=self.identity_mapping,
@@ -394,29 +402,34 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
                             norm_func=self.norm_func, 
                             identity_mapping=self.identity_mapping,
                             dropout=self.dropout)))
-        layers[1].layers = blocks - 1
+        layers[-1].layers = blocks - 1
             
         return layers
 
-    def forward(self, x, debug=False):
+    def forward(self, x, debug=False, **kwargs):
 
         x = self.conv1(x)
         z = torch.zeros_like(x)
+        (z, x) = self.down01(z, x)  # TODO test if we need this
 
-        (z, x) = self.down01(z, x)
         self.layer1.reset()
         for i in range(self.layer1.layers):
             (z, x) = self.layer1(z, x, debug=debug)
-
+        
         (z, x) = self.down12(z, x)
+        x = z
+        z = torch.zeros_like(x)
         self.layer2.reset()
         for i in range(self.layer2.layers):
             (z, x) = self.layer2(z, x, debug=debug)
 
         (z, x) = self.down23(z, x)
+        x = z
+        z = torch.zeros_like(x)
         self.layer3.reset()
         for i in range(self.layer3.layers):
             (z, x) = self.layer3(z, x, debug=debug)
+        #print(f"block 3 out: {z.shape}")
 
         z = self.bn(z)
         z = self.relu(z)
@@ -429,7 +442,10 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         info1 = self.layer1.get_diffs()
         info2 = self.layer2.get_diffs()
         info3 = self.layer3.get_diffs()
-        return z, [info1, info2, info3]
+        diffs = [info1, info2, info3]
+        info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+        info = "\n".join(map(str, info.items()))
+        return z, info
 
 
 
@@ -502,6 +518,5 @@ if __name__ == '__main__':
     print(y.size())
     n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
-    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-    print("\n".join(map(str, info.items())))
+    print(diffs)
 

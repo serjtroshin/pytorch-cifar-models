@@ -69,11 +69,11 @@ parser.add_argument("--layers", type=int, default=18,
 
 parser.add_argument('--n_layer', type=int, default=12,
                     help='number of total layers')
-parser.add_argument('--f_thres', type=int, default=50,
+parser.add_argument('--f_thres', type=int, default=64,
                     help='forward pass Broyden threshold')
 parser.add_argument('--b_thres', type=int, default=80,
                     help='backward pass Broyden threshold')
-parser.add_argument('--pretrain_steps', type=int, default=10000,
+parser.add_argument('--pretrain_steps', type=int, default=200,
                     help='number of pretrain steps')
                           
 
@@ -136,10 +136,11 @@ def main():
         #                                        inplanes=args.inplanes,
         #                                        track_running_stats=args.track_running_stats,
         #                                        layers=args.layers)
-        model = deq_parresnet110_cifar(18, 
-                                        pretrain_steps=args.pretrain_steps, 
-                                        n_layer=args.n_layer, 
-                                        )
+        model = wtii_deq_preact_resnet110_cifar(wnorm = True, pretrain_steps=args.pretrain_steps)
+        # model = deq_parresnet110_cifar(18, 
+        #                                 pretrain_steps=args.pretrain_steps, 
+        #                                 n_layer=args.n_layer, 
+        #                                 )
         # model = resnet164_cifar(num_classes=100)
         # model = resnet1001_cifar(num_classes=100)
         # model = preact_resnet164_cifar(num_classes=100)

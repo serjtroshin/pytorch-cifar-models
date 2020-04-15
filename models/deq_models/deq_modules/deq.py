@@ -40,7 +40,7 @@ class RootFind(Function):
 
     @staticmethod
     def forward(ctx, func, z1ss, uss, z0, *args, **kwargs):
-        use_broyden = kwargs.get("method", True)
+        use_broyden = kwargs.get("method", False) # TODO USE BROYDEN
 
         bsz, d_model, seq_len = z1ss.size()
         eps = 1e-6 * np.sqrt(bsz * seq_len * d_model)
@@ -60,7 +60,6 @@ class RootFind(Function):
                 z1ss_est = root_find(func, z1ss, uss, z0, eps, *args)   # args include pos_emb, threshold, train_step
             else:
                 for i in range(threshold): # todo
-                    
                     z1ss = func(z1ss, uss, z0, debug=debug)
                 z1ss_est = z1ss
 
@@ -140,4 +139,4 @@ class DEQModule(nn.Module):
             y.backward(torch.zeros_like(dl_df_est), retain_graph=False)
 
             grad_args = [None for _ in range(len(args))]
-            return (None, dl_df_est, None, None, *grad_args)
+            return (None, dl_df_est, dl_df_est, None, *grad_args)
