@@ -32,6 +32,9 @@ class DEQParResNetLayer(nn.Module):
         z1ss = z.reshape((bs, ch, h * w))
         return z1ss
 
+    def copy(self, func):
+        self.layer.copy(func.layer)
+        
     def forward(self, z1ss, uss, z0, *args, **kwargs):
         debug=kwargs.get('debug', False)
         z = self.seq2img(z1ss)
@@ -65,6 +68,7 @@ class DEQParResNet(WTIIPreAct_ResNet_Cifar):
         self.deq3 = ParResNetDEQModule(self.func3, self.func_copy3)
 
     def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False):
+
         if 0 <= train_step < self.pretrain_steps:
             if debug: print("FORWARD")
             x = self.conv1(x)
@@ -96,6 +100,7 @@ class DEQParResNet(WTIIPreAct_ResNet_Cifar):
             (z, x) = self.down01(z, x)  # TODO test if we need this
             # layer1
             self.layer1.reset()
+            self.func_copy1.copy(self.func1)
             z1s = self.func1.img2seq(z)
             us = self.func1.img2seq(x)
             self.layer1.reset()
@@ -108,6 +113,7 @@ class DEQParResNet(WTIIPreAct_ResNet_Cifar):
             z1s = self.func2.img2seq(z)
             us = self.func2.img2seq(x)
             self.layer2.reset()
+            self.func_copy2.copy(self.func2)
             z1s = self.deq2(z1s, us, None, threshold=f_thres, debug=debug)
             z = self.func2.seq2img(z1s)
             # layer3
@@ -117,6 +123,7 @@ class DEQParResNet(WTIIPreAct_ResNet_Cifar):
             z1s = self.func3.img2seq(z)
             us = self.func3.img2seq(x)
             self.layer3.reset()
+            self.func_copy3.copy(self.func3)
             z1s = self.deq3(z1s, us, None, threshold=f_thres, debug=debug)
             z = self.func3.seq2img(z1s)
 

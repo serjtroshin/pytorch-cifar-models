@@ -126,6 +126,10 @@ class IIPreActBasicBlock(nn.Module):
         if 'conv2_fn' in self.__dict__:
             self.conv2_fn.reset(self.conv2)
 
+    def copy(self, func):
+        self.conv1.weight.data = func.conv1.weight.data.clone()
+        self.conv2.weight.data = func.conv2.weight.data.clone()
+
     def forward(self, z, x):
         x = self.dropout(x)
 

@@ -39,6 +39,9 @@ class SequentialLayer(nn.Module):
     def wnorm(self):
         self.layer.wnorm()
 
+    def copy(self, func):
+        self.layer.copy(func.layer)
+
     def get_diffs(self):
         return self.meter.diffs
 
