@@ -19,6 +19,7 @@ from tensorboardX import SummaryWriter
 
 from models import *
 from utils.plot_utils import get_logger
+from utils.data_parallel import BalancedDataParallel
 
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
@@ -73,8 +74,10 @@ parser.add_argument('--f_thres', type=int, default=50,
                     help='forward pass Broyden threshold')
 parser.add_argument('--b_thres', type=int, default=80,
                     help='backward pass Broyden threshold')
-parser.add_argument('--pretrain_steps', type=int, default=10000,
+parser.add_argument('--pretrain_steps', type=int, default=100,
                     help='number of pretrain steps')
+parser.add_argument('--clip', type=float, default=1000,
+                    help='gradient clipping (default: 0.07)')
                           
 
 best_prec = 0
@@ -168,7 +171,7 @@ def main():
         else:
             logging('model type unrecognized...')
             return
-
+        model.cuda()
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
         if args.optimizer == "sgd":
@@ -304,6 +307,7 @@ class AverageMeter(object):
 
 
 def train(trainloader, model, criterion, optimizer, epoch):
+    params = list(model.parameters()) + list(criterion.parameters())
     print("train loader", trainloader)
     global train_global_it
     batch_time = AverageMeter()
@@ -332,6 +336,7 @@ def train(trainloader, model, criterion, optimizer, epoch):
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(params, args.clip)
         optimizer.step()
 
         # measure elapsed time
@@ -385,7 +390,8 @@ def validate(val_loader, model, criterion):
             end = time.time()
 
             if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
-                _, debug_info = model.module(input[:1, ...], debug=True)
+                _, debug_info = model.module(input[:, ...], debug=True, f_thres=args.f_thres,
+                                        b_thres=args.b_thres)
                 if debug_info is not None: # if batch size is correct
                     logging("DEBUG:" + debug_info)
 

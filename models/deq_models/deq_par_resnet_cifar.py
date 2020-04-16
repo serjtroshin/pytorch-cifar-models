@@ -35,6 +35,9 @@ class DEQParResNetLayer(nn.Module):
                             z3.reshape(bs, ch, z3sh[2]*z3sh[3]*4)  ], dim=-1)
         return z1ss
 
+    def copy(self, func):
+        self.layer.copy(func.layer)
+
     def forward(self, z1ss, uss, z0, *args, **kwargs):
         debug=kwargs.get('debug', False)
         x = uss
@@ -75,6 +78,7 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
         shapes = self._infer_shapes(x)
         self.func.update_shapes(shapes)
         self.func_copy.update_shapes(shapes)
+        self.func_copy.copy(self.func)
 
         z1 = torch.zeros((bs, self.inplanes, h, w), device=x.device)
         z2 = torch.zeros((bs, self.inplanes * 2, h // 2, w // 2), device=x.device)
@@ -114,7 +118,7 @@ def deq_parresnet110_cifar(layers=18, **kwargs):
     return model
 
 if __name__=="__main__":
-    net = deq_parresnet110_cifar(18, pretrain_steps=-1, n_layer=3)
+    net = nn.DataParallel(deq_parresnet110_cifar(18, pretrain_steps=-1, n_layer=3))
     x = torch.randn(1, 3, 32, 32)
     y, debug_info = net(x, train_step=-1, debug=True, f_thres=50)
 

@@ -58,6 +58,10 @@ class PreActBasicParBlock(nn.Module):
         if 'conv2_fn' in self.__dict__:
             self.conv2_fn.reset(self.conv2)
 
+    def copy(self, func):
+        self.conv1.weight.data = func.conv1.weight.data.clone()
+        self.conv2.weight.data = func.conv2.weight.data.clone()
+
     def forward(self, z):
         residual = z
         
@@ -93,6 +97,12 @@ class TransitionBlock(nn.Module):
             if isinstance(module, nn.Conv2d):
                 if '_fn' in self.net[i].__dict__:
                    module._fn.reset(module)
+
+    def copy(self, func):
+        for m1, m2 in zip(self.net, func.net):
+            if isinstance(m1, nn.Conv2d):
+                m1.weight.data = m2.weight.data.clone()
+
 
     def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2, transition_f=conv3x3):
         super(TransitionBlock, self).__init__()

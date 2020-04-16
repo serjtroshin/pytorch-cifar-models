@@ -22,7 +22,7 @@ class ParResNetDEQModule(DEQModule):
 
         if us is None:
             raise ValueError("Input injection is required.")
-        assert threshold == 50, threshold
+        # assert threshold == 50, threshold
         z1s_out = RootFind.apply(self.func, z1s, us, z0, debug, threshold, train_step)
         if self.training:
             z1s_out = RootFind.f(self.func, z1s_out, us, z0, threshold, train_step)
