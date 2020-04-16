@@ -2,7 +2,7 @@ logs/
 result/
 __pycache__
 data/*
-.vscode
+.vscode/
 nohup.out
 ResNet*/
 .ipynb_checkpoints/
@@ -13,3 +13,4 @@ slurm*
 *.svg
 tmp*/
 experiments/
+deq/

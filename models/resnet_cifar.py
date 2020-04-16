@@ -352,7 +352,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
         tmp = self.inplanes
-        self.down01, self.layer1 = self._make_layer(block, inplanes, layers[0])
+        _, self.layer1 = self._make_layer(block, inplanes, layers[0])
         self.down12, self.layer2 = self._make_layer(block, inplanes*2, layers[1], stride=2)
         self.down23, self.layer3 = self._make_layer(block, inplanes*4, layers[2], stride=2)
         if copy_layers:
@@ -379,7 +379,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
     def wnorm(self):
         # wnorm
         raise NotImplemented # update for deq func_copy
-        self.down01.wnorm()
+        # self.down01.wnorm()
         self.down12.wnorm()
         self.down23.wnorm()
         self.layer1.wnorm()
@@ -395,10 +395,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
         layers = []
         
-        layers.append(block(self.inplanes, planes, stride, downsample, 
-                            norm_func=self.norm_func, 
-                            identity_mapping=self.identity_mapping,
-                            dropout=self.dropout))
+        layers.append(downsample)
         self.inplanes = planes*block.expansion
 
         layers.append(SequentialLayer(
@@ -410,46 +407,18 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
             
         return layers
 
-    def forward(self, x, debug=False, **kwargs):
-
-        x = self.conv1(x)
-        z = torch.zeros_like(x)
-        (z, x) = self.down01(z, x)  # TODO test if we need this
-
-        self.layer1.reset()
-        for i in range(self.layer1.layers):
-            (z, x) = self.layer1(z, x, debug=debug)
-        
-        (z, x) = self.down12(z, x)
-        x = z
-        z = torch.zeros_like(x)
-        self.layer2.reset()
-        for i in range(self.layer2.layers):
-            (z, x) = self.layer2(z, x, debug=debug)
-
-        (z, x) = self.down23(z, x)
-        x = z
-        z = torch.zeros_like(x)
-        self.layer3.reset()
-        for i in range(self.layer3.layers):
-            (z, x) = self.layer3(z, x, debug=debug)
-        #print(f"block 3 out: {z.shape}")
-
-        z = self.bn(z)
-        z = self.relu(z)
-        z = self.avgpool(z)
-        z = z.view(z.size(0), -1)
-        z = self.fc(z)
-        
-        if not debug:
-            return z
+    def _get_diffs(self):
         info1 = self.layer1.get_diffs()
         info2 = self.layer2.get_diffs()
         info3 = self.layer3.get_diffs()
         diffs = [info1, info2, info3]
         info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
         info = "\n".join(map(str, info.items()))
-        return z, info
+        return info
+
+    def forward(self, x, debug=False, **kwargs):
+        # see deq_resnet_cifar
+        raise NotImplemented
 
 
 

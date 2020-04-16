@@ -1,3 +1,10 @@
 {
-    "python.pythonPath": "/home/stroshin/miniconda3/envs/deq/bin/python"
+    "python.pythonPath": "/home/sergey/pytorch-cifar-models/deq/bin/python3.7",
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/*/**": true,
+        "**/deq/**": true,
+      },
+      "python.linting.enabled": false
 }
