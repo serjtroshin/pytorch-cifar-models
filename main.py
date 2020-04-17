@@ -75,6 +75,8 @@ parser.add_argument('--b_thres', type=int, default=10000,
                     help='backward pass Broyden threshold')
 parser.add_argument('--pretrain_steps', type=int, default=200,
                     help='number of pretrain steps')
+parser.add_argument('--debug',  action='store_true')
+
                           
 
 best_prec = 0
@@ -354,7 +356,9 @@ def train(trainloader, model, criterion, optimizer, epoch):
                                 top1.val,
                                 train_global_it)
             train_global_it += 1
-            
+            if args.debug:
+                break
+
 
 def validate(val_loader, model, criterion):
     print("val loader", val_loader)
@@ -404,6 +408,8 @@ def validate(val_loader, model, criterion):
                                     top1.val,
                                     test_global_it)
                 test_global_it += 1
+                if args.debug:
+                    break
 
     logging(' * Prec {top1.avg:.3f}% '.format(top1=top1))
 

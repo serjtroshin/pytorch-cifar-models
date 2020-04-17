@@ -40,8 +40,7 @@ class RootFind(Function):
 
     @staticmethod
     def forward(ctx, func, z1ss, uss, z0, *args, **kwargs):
-        use_broyden = kwargs.get("method", False) # TODO USE BROYDEN
-
+        use_broyden = kwargs.get("method", True) # TODO USE BROYDEN
         bsz, d_model, seq_len = z1ss.size()
         eps = 1e-6 * np.sqrt(bsz * seq_len * d_model)
         threshold = args[-2]    # Can also set this to be different, based on training/inference

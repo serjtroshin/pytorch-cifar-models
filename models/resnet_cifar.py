@@ -412,7 +412,10 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         info2 = self.layer2.get_diffs()
         info3 = self.layer3.get_diffs()
         diffs = [info1, info2, info3]
-        info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+        if isinstance(info1, str):
+            return '\n'.join(diffs)
+        else:
+            info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
         info = "\n".join(map(str, info.items()))
         return info
 

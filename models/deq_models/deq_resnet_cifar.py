@@ -96,7 +96,6 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
     def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False):
 
         do_pretraning = 0 <= train_step < self.pretrain_steps
-
         x = self.conv1(x)
         x = self.deq_layer1(x, f_thres, debug, do_pretraning)
         x = self.down12(x)

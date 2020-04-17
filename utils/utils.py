@@ -43,6 +43,8 @@ class SequentialLayer(nn.Module):
         self.layer.copy(func.layer)
 
     def get_diffs(self):
+        if hasattr(self, "_result_info"):
+            return self._result_info
         return self.meter.diffs
 
     def forward(self, *input, debug=False):
