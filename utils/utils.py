@@ -45,6 +45,8 @@ class SequentialLayer(nn.Module):
     def get_diffs(self):
         if hasattr(self, "_result_info"):
             return self._result_info
+        if len(self.meter.diffs) == 0:
+            return "None"
         return self.meter.diffs
 
     def forward(self, *input, debug=False):

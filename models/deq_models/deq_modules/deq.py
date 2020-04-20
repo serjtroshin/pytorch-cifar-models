@@ -32,7 +32,10 @@ class RootFind(Function):
         g = lambda x: RootFind.g(func, x, uss, z0, *args)
         result_info = broyden(g, z1ss_est, threshold=threshold, eps=eps, name="forward")
         z1ss_est = result_info['result']
+        del result_info['result']
+        del result_info['diff_detail']
         func.layer._result_info = str(result_info)
+        func.layer._diffs = result_info['diff']
             
         if threshold > 100:
             torch.cuda.empty_cache()

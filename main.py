@@ -18,7 +18,7 @@ import torchvision.transforms as transforms
 from tensorboardX import SummaryWriter
 
 from models import *
-from utils.plot_utils import get_logger
+from utils.plot_utils import get_logger, calc_grad_norm
 
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
@@ -69,14 +69,20 @@ parser.add_argument("--layers", type=int, default=18,
 
 parser.add_argument('--n_layer', type=int, default=12,
                     help='number of total layers')
-parser.add_argument('--f_thres', type=int, default=30,
+parser.add_argument('--f_thres', type=int, default=50,
                     help='forward pass Broyden threshold')
 parser.add_argument('--b_thres', type=int, default=10000,
                     help='backward pass Broyden threshold')
 parser.add_argument('--pretrain_steps', type=int, default=200,
                     help='number of pretrain steps')
-parser.add_argument('--debug',  action='store_true')
+parser.add_argument('--clip', type=float, default=1.0,
+                    help='gradient clipping (default: None)')
 
+
+
+parser.add_argument('--debug',  action='store_true')
+parser.add_argument('--max_train_it',  default=1, type=int)
+parser.add_argument('--max_test_it',  default=1, type=int)
                           
 
 best_prec = 0
@@ -107,7 +113,7 @@ def main():
     if not os.path.exists(args.work_dir):
         os.makedirs(args.work_dir)
     print('Experiment dir : {}'.format(args.work_dir))
-    logging = get_logger(os.path.join(args.work_dir, "log.txt"))
+    logging = get_logger(os.path.join(args.work_dir, "log.txt"), print_=args.debug)
     writer = SummaryWriter(args.work_dir, flush_secs=1)
 
 
@@ -138,7 +144,12 @@ def main():
         #                                        inplanes=args.inplanes,
         #                                        track_running_stats=args.track_running_stats,
         #                                        layers=args.layers)
-        model = wtii_deq_preact_resnet110_cifar(wnorm = False, pretrain_steps=args.pretrain_steps)
+        model = wtii_deq_preact_resnet110_cifar(wnorm = False, 
+            pretrain_steps=args.pretrain_steps,
+            inplanes=args.inplanes,
+            norm_func=args.norm_func,
+            track_running_stats=args.track_running_stats,
+        )
         # model = deq_parresnet110_cifar(18, 
         #                                 pretrain_steps=args.pretrain_steps, 
         #                                 n_layer=args.n_layer, 
@@ -307,12 +318,13 @@ class AverageMeter(object):
 
 
 def train(trainloader, model, criterion, optimizer, epoch):
-    print("train loader", trainloader)
     global train_global_it
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
+    grads = AverageMeter()
+    diffs = AverageMeter()
 
     model.train()
 
@@ -331,41 +343,59 @@ def train(trainloader, model, criterion, optimizer, epoch):
         prec = accuracy(output, target)[0]
         losses.update(loss.item(), input.size(0))
         top1.update(prec.item(), input.size(0))
+        diffs.update(model.module.deq_layer1.func.layer._diffs)
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
+        if args.clip is not None:
+            nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+        grads.update(calc_grad_norm(model.module), input.size(0))
         optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
+        if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+            _, debug_info = model.module(input[:1, ...], debug=True)
+            if debug_info is not None: # if batch size is correct
+                logging("DEBUG TRAIN:" + debug_info)
+
         if i % args.print_freq == 0:
-            logging('Epoch: [{0}][{1}/{2}]\t'
+            logging('Epoch: [{0}][{1}/{2}] \tGlobal[{it}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
-                   epoch, i, len(trainloader), batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1))
+                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%) \t'
+                  'Grad {grad.val:.3f} ({grad.avg:.3f}) \t'
+                  'Diffs0 {diff.val:.3f} ({diff.avg:.3f}) \t'.format(
+                   epoch, i, len(trainloader), it=train_global_it, batch_time=batch_time,
+                   data_time=data_time, loss=losses, top1=top1, grad=grads, diff=diffs))
             writer.add_scalar('train/loss', 
                                 losses.val,
                                 train_global_it)
             writer.add_scalar('train/top1', 
                                 top1.val,
                                 train_global_it)
+            writer.add_scalar('train/grad',
+                                grads.val, 
+                                train_global_it)
+            writer.add_scalar('train/diff0',
+                                diffs.val, 
+                                train_global_it)                    
             train_global_it += 1
-            if args.debug:
+            if args.debug and train_global_it >= args.max_train_it:
                 break
 
 
 def validate(val_loader, model, criterion):
-    print("val loader", val_loader)
     global test_global_it
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
+    diffs = AverageMeter()
+
 
     # switch to evaluate mode
     model.eval()
@@ -384,6 +414,7 @@ def validate(val_loader, model, criterion):
             prec = accuracy(output, target)[0]
             losses.update(loss.item(), input.size(0))
             top1.update(prec.item(), input.size(0))
+            diffs.update(model.module.deq_layer1.func.layer._diffs)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -392,23 +423,27 @@ def validate(val_loader, model, criterion):
             if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
                 _, debug_info = model.module(input[:1, ...], debug=True)
                 if debug_info is not None: # if batch size is correct
-                    logging("DEBUG:" + debug_info)
+                    logging("DEBUG TEST:" + debug_info)
 
             if i % args.print_freq == 0:
-                logging('Test: [{0}/{1}]\t'
+                logging('Test: [{0}/{1}] \tGlobal[{it}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)'.format(
-                   i, len(val_loader), batch_time=batch_time, loss=losses,
-                   top1=top1))
+                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)\t'
+                  'Diffs0 {diff.val:.3f} ({diff.avg:.3f}) \t'.format(
+                   i, len(val_loader), it=test_global_it, batch_time=batch_time, loss=losses,
+                   top1=top1, diff=diffs))
                 writer.add_scalar('test/loss', 
                                     losses.val,
                                     test_global_it)
                 writer.add_scalar('test/top1',
                                     top1.val,
                                     test_global_it)
+                writer.add_scalar('test/diff0',
+                                diffs.val, 
+                                test_global_it)
                 test_global_it += 1
-                if args.debug:
+                if args.debug and test_global_it >= args.max_test_it:
                     break
 
     logging(' * Prec {top1.avg:.3f}% '.format(top1=top1))

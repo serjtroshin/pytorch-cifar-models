@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import math
 import sys
+from functools import partial
 
 sys.path.append('../')
 from utils.utils import SequentialLayer
@@ -22,8 +23,8 @@ def conv3x3(in_planes, out_planes, stride=1):
 
 def get_norm_func():
     return {
-        "inst" : nn.InstanceNorm2d,
-        "batch" : nn.BatchNorm2d
+        "inst" : partial(nn.InstanceNorm2d, affine=False),
+        "batch" : partial(nn.BatchNorm2d, affine=False)
     }
 
 class BasicBlock(nn.Module):

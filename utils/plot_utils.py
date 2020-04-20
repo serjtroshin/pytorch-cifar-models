@@ -18,12 +18,25 @@ class ConvergenceMeter(object):
         self.prev_z = z
         self.bs = z.shape[0]
 
+
+def calc_grad_norm(model):
+    total_norm = 0.
+    for p in model.parameters():
+        if p.grad is None:
+            continue
+        param_norm = p.grad.data.norm(2)
+        total_norm += param_norm.item() ** 2
+    total_norm = total_norm ** (1. / 2)
+    return total_norm
+        
+
 def logging(s, log_path, print_=True, log_=True):
     if print_:
         print(s)
     if log_:
         with open(log_path, 'a+') as f_log:
             f_log.write(s + '\n')
+        print(s + '\n')
 
 def get_logger(log_path, **kwargs):
     return functools.partial(logging, log_path=log_path, **kwargs)

@@ -64,8 +64,13 @@ class ResNetToDEQWrapper(nn.Module):
 
         if pretraining:
             self.layer.reset()
+            min_diff = 1e10
+            prev = z
             for i in range(self.layer.layers):
                 z, _ = self.layer(z, x, debug=debug)
+                min_diff = min(min_diff, (z - prev).norm().item())
+                prev = z
+            self.layer._diffs = min_diff
             return z
 
         self.layer.reset()
@@ -99,9 +104,9 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         x = self.conv1(x)
         x = self.deq_layer1(x, f_thres, debug, do_pretraning)
         x = self.down12(x)
-        x = self.deq_layer2(x, f_thres, debug, do_pretraning)
+        # x = self.deq_layer2(x, f_thres, debug, do_pretraning)
         x = self.down23(x)
-        x = self.deq_layer3(x, f_thres, debug, do_pretraning)
+        # x = self.deq_layer3(x, f_thres, debug, do_pretraning)
         x = self.bn(x)
         x = self.relu(x)
         x = self.avgpool(x)

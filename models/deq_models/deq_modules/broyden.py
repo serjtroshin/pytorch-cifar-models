@@ -133,7 +133,7 @@ def broyden(g, x0, threshold, eps, ls=False, name="unknown"):
     VTs = torch.zeros(bsz, threshold, total_hsize, seq_len)
     update = -matvec(Us[:,:,:,:nstep], VTs[:,:nstep], gx)      # Formally should be -torch.matmul(inv_jacobian (-I), gx)
     new_objective = init_objective = torch.norm(gx).item()
-    prot_break = False
+    prot_break = True
     trace = [init_objective]
     
     # To be used in protective breaks
