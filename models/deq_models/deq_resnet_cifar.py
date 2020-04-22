@@ -4,7 +4,7 @@ from models.deq_models.deq_modules.deq import *
 
 from models.resnet_cifar import WTIIPreAct_ResNet_Cifar, IIPreActBasicBlock
 from models.deq_models.deq_resnet_cifar_module import ParResNetDEQModule
-from utils.utils import AverageMeter
+from utils.plot_utils import AverageMeter, calc_grad_norm
 
 
 class DEQParResNetLayer(nn.Module):
@@ -62,6 +62,7 @@ class ResNetToDEQWrapper(nn.Module):
         self.n_layer = n_layer
         self.grads = AverageMeter()
         self.diffs = AverageMeter()
+        self.forward_tr = []
 
     def update(self, input):
         self.grads.update(calc_grad_norm(self), input.size(0))
@@ -69,18 +70,20 @@ class ResNetToDEQWrapper(nn.Module):
     
     def forward(self, x, f_thres=None, debug=False, pretraining=False):  
         z = torch.zeros_like(x)
-
+        if debug:
+            self.forward_tr = []
         if pretraining:
             self.layer.reset()
             min_diff = 1e10
             prev = z
             for i in range(self.n_layer):
                 z, _ = self.layer(z, x, debug=debug)
+                if debug:
+                    self.forward_tr.append((z - prev).norm().item())
                 min_diff = min(min_diff, (z - prev).norm().item())
                 prev = z
             self.layer._diffs = min_diff
             return z
-
         self.layer.reset()
         self.func_copy.copy(self.func)
         z1s = self.func.img2seq(z)
@@ -132,9 +135,7 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
 
     def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False):
 
-        do_pretraning = 0 <= train_step < self.pretrain_steps
-        if not self.training:
-            do_pretraning = self.test_mode == "forward"
+        do_pretraning = 0 <= train_step < self.pretrain_steps or self.test_mode == "forward"
         x = self.conv1(x)
         x = self.deq_layer1(x, f_thres, debug, do_pretraning)
         x = self.down12(x)
@@ -149,7 +150,15 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         
         if not debug:
             return x
-        return x, self._get_diffs()
+        
+        if self.test_mode == "broyden":
+            diffs = self._get_diffs()
+            info = '\n'.join(diffs)
+        else:
+            diffs = [self.deq_layer1.forward_tr, self.deq_layer2.forward_tr, self.deq_layer3.forward_tr]
+            info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
+            info = "\n".join(map(str, info.items()))
+        return x, info
         
 def wtii_deq_preact_resnet110_cifar(**kwargs):
     model = DEQSeqResNet(IIPreActBasicBlock, [18, 18, 18], **kwargs)

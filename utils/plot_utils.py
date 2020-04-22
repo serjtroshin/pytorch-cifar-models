@@ -54,7 +54,6 @@ def logging(s, log_path, print_=True, log_=True):
     if log_:
         with open(log_path, 'a+') as f_log:
             f_log.write(s + '\n')
-        print(s + '\n')
-
+            
 def get_logger(log_path, **kwargs):
     return functools.partial(logging, log_path=log_path, **kwargs)
