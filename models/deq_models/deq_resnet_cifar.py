@@ -4,6 +4,7 @@ from models.deq_models.deq_modules.deq import *
 
 from models.resnet_cifar import WTIIPreAct_ResNet_Cifar, IIPreActBasicBlock
 from models.deq_models.deq_resnet_cifar_module import ParResNetDEQModule
+from utils.utils import AverageMeter
 
 
 class DEQParResNetLayer(nn.Module):
@@ -52,12 +53,19 @@ class ResNetToDEQWrapper(nn.Module):
     """
     This class is just to reduce code
     """
-    def __init__(self, layer, layer_copy):
+    def __init__(self, layer, layer_copy, n_layer=3):
         super(ResNetToDEQWrapper, self).__init__()
         self.layer = layer
         self.func = DEQParResNetLayer(self.layer)
         self.func_copy = DEQParResNetLayer(layer_copy)
         self.deq = ParResNetDEQModule(self.func, self.func_copy)
+        self.n_layer = n_layer
+        self.grads = AverageMeter()
+        self.diffs = AverageMeter()
+
+    def update(self, input):
+        self.grads.update(calc_grad_norm(self), input.size(0))
+        self.diffs.update(self.layer._diffs)
     
     def forward(self, x, f_thres=None, debug=False, pretraining=False):  
         z = torch.zeros_like(x)
@@ -66,7 +74,7 @@ class ResNetToDEQWrapper(nn.Module):
             self.layer.reset()
             min_diff = 1e10
             prev = z
-            for i in range(self.layer.layers):
+            for i in range(self.n_layer):
                 z, _ = self.layer(z, x, debug=debug)
                 min_diff = min(min_diff, (z - prev).norm().item())
                 prev = z
@@ -83,6 +91,7 @@ class ResNetToDEQWrapper(nn.Module):
 
 
 
+
 class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
     """
     Sequential stacking of DEQ layers.
@@ -93,20 +102,45 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
 
         self.pretrain_steps = kwargs.get("pretrain_steps", 200)
         self.n_layer = kwargs.get("n_layer", 3)
+        self.test_mode = kwargs.get("test_mode", "broyden")
 
         self.deq_layer1 = ResNetToDEQWrapper(self.layer1, self.layer1_copy)
         self.deq_layer2 = ResNetToDEQWrapper(self.layer2, self.layer2_copy)
         self.deq_layer3 = ResNetToDEQWrapper(self.layer3, self.layer3_copy)
 
+    def get_grads(self):
+        # just for plots
+        return {
+            0: self.deq_layer1.grads,
+            1: self.deq_layer2.grads,
+            2: self.deq_layer3.grads
+        }
+    
+    def get_diffs(self):
+        # just for plots
+        return {
+            0: self.deq_layer1.diffs,
+            1: self.deq_layer2.diffs,
+            2: self.deq_layer3.diffs
+        }
+
+    def update_meters(self, input):
+        # just for plots
+        self.deq_layer1.update(input)
+        self.deq_layer2.update(input)
+        self.deq_layer3.update(input)
+
     def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False):
 
         do_pretraning = 0 <= train_step < self.pretrain_steps
+        if not self.training:
+            do_pretraning = self.test_mode == "forward"
         x = self.conv1(x)
         x = self.deq_layer1(x, f_thres, debug, do_pretraning)
         x = self.down12(x)
-        # x = self.deq_layer2(x, f_thres, debug, do_pretraning)
+        x = self.deq_layer2(x, f_thres, debug, do_pretraning)
         x = self.down23(x)
-        # x = self.deq_layer3(x, f_thres, debug, do_pretraning)
+        x = self.deq_layer3(x, f_thres, debug, do_pretraning)
         x = self.bn(x)
         x = self.relu(x)
         x = self.avgpool(x)

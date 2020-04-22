@@ -18,7 +18,7 @@ import torchvision.transforms as transforms
 from tensorboardX import SummaryWriter
 
 from models import *
-from utils.plot_utils import get_logger, calc_grad_norm
+from utils.plot_utils import get_logger, calc_grad_norm, AverageMeter
 
 
 parser = argparse.ArgumentParser(description='PyTorch Cifar10 Training')
@@ -67,15 +67,15 @@ parser.add_argument("--track_running_stats", action="store_true",
 parser.add_argument("--layers", type=int, default=18,
                         help="layers (aka blocks) of WT model")          
 
-parser.add_argument('--n_layer', type=int, default=12,
+parser.add_argument('--n_layer', type=int, default=18,
                     help='number of total layers')
-parser.add_argument('--f_thres', type=int, default=50,
+parser.add_argument('--f_thres', type=int, default=30,
                     help='forward pass Broyden threshold')
 parser.add_argument('--b_thres', type=int, default=10000,
                     help='backward pass Broyden threshold')
 parser.add_argument('--pretrain_steps', type=int, default=200,
                     help='number of pretrain steps')
-parser.add_argument('--clip', type=float, default=1.0,
+parser.add_argument('--clip', type=float, default=10.0,
                     help='gradient clipping (default: None)')
 
 
@@ -83,6 +83,9 @@ parser.add_argument('--clip', type=float, default=1.0,
 parser.add_argument('--debug',  action='store_true')
 parser.add_argument('--max_train_it',  default=1, type=int)
 parser.add_argument('--max_test_it',  default=1, type=int)
+
+parser.add_argument('--test_mode', default="broyden", choices=["broyden", "forward"],
+                    help="mode for test/validation")
                           
 
 best_prec = 0
@@ -149,6 +152,8 @@ def main():
             inplanes=args.inplanes,
             norm_func=args.norm_func,
             track_running_stats=args.track_running_stats,
+            n_layer=args.n_layer,
+            test_mode=args.test_mode,
         )
         # model = deq_parresnet110_cifar(18, 
         #                                 pretrain_steps=args.pretrain_steps, 
@@ -299,23 +304,6 @@ def main():
     writer.close()
 
 
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
 
 def train(trainloader, model, criterion, optimizer, epoch):
     global train_global_it
@@ -323,8 +311,6 @@ def train(trainloader, model, criterion, optimizer, epoch):
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    grads = AverageMeter()
-    diffs = AverageMeter()
 
     model.train()
 
@@ -343,14 +329,13 @@ def train(trainloader, model, criterion, optimizer, epoch):
         prec = accuracy(output, target)[0]
         losses.update(loss.item(), input.size(0))
         top1.update(prec.item(), input.size(0))
-        diffs.update(model.module.deq_layer1.func.layer._diffs)
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
         if args.clip is not None:
             nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-        grads.update(calc_grad_norm(model.module), input.size(0))
+        model.module.update_meters(input)
         optimizer.step()
 
         # measure elapsed time
@@ -367,23 +352,25 @@ def train(trainloader, model, criterion, optimizer, epoch):
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%) \t'
-                  'Grad {grad.val:.3f} ({grad.avg:.3f}) \t'
-                  'Diffs0 {diff.val:.3f} ({diff.avg:.3f}) \t'.format(
+                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%) \t'.format(
                    epoch, i, len(trainloader), it=train_global_it, batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1, grad=grads, diff=diffs))
+                   data_time=data_time, loss=losses, top1=top1))
             writer.add_scalar('train/loss', 
                                 losses.val,
                                 train_global_it)
             writer.add_scalar('train/top1', 
                                 top1.val,
                                 train_global_it)
-            writer.add_scalar('train/grad',
-                                grads.val, 
-                                train_global_it)
-            writer.add_scalar('train/diff0',
-                                diffs.val, 
-                                train_global_it)                    
+            diffs = model.module.get_diffs()
+            for key in diffs:
+                writer.add_scalar(f'train/diff{key}',
+                            diffs[key].val, 
+                            test_global_it)  
+            grads = model.module.get_diffs()
+            for key in grads:
+                writer.add_scalar(f'train/grad{key}',
+                            grads[key].val, 
+                            test_global_it)                 
             train_global_it += 1
             if args.debug and train_global_it >= args.max_train_it:
                 break
@@ -429,18 +416,19 @@ def validate(val_loader, model, criterion):
                 logging('Test: [{0}/{1}] \tGlobal[{it}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)\t'
-                  'Diffs0 {diff.val:.3f} ({diff.avg:.3f}) \t'.format(
+                  'Prec {top1.val:.3f}% ({top1.avg:.3f}%)\t'.format(
                    i, len(val_loader), it=test_global_it, batch_time=batch_time, loss=losses,
-                   top1=top1, diff=diffs))
+                   top1=top1))
                 writer.add_scalar('test/loss', 
                                     losses.val,
                                     test_global_it)
                 writer.add_scalar('test/top1',
                                     top1.val,
                                     test_global_it)
-                writer.add_scalar('test/diff0',
-                                diffs.val, 
+                diffs = model.module.get_diffs()
+                for key in diffs:
+                    writer.add_scalar(f'test/diff{key}',
+                                diffs[key].val, 
                                 test_global_it)
                 test_global_it += 1
                 if args.debug and test_global_it >= args.max_test_it:
