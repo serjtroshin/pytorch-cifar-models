@@ -381,8 +381,6 @@ def validate(val_loader, model, criterion):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    diffs = AverageMeter()
-
 
     # switch to evaluate mode
     model.eval()
@@ -401,7 +399,7 @@ def validate(val_loader, model, criterion):
             prec = accuracy(output, target)[0]
             losses.update(loss.item(), input.size(0))
             top1.update(prec.item(), input.size(0))
-            diffs.update(model.module.deq_layer1.func.layer._diffs)
+            model.module.update_meters(input)
 
             # measure elapsed time
             batch_time.update(time.time() - end)

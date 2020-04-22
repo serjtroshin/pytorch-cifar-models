@@ -107,9 +107,10 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         self.n_layer = kwargs.get("n_layer", 3)
         self.test_mode = kwargs.get("test_mode", "broyden")
 
-        self.deq_layer1 = ResNetToDEQWrapper(self.layer1, self.layer1_copy)
-        self.deq_layer2 = ResNetToDEQWrapper(self.layer2, self.layer2_copy)
-        self.deq_layer3 = ResNetToDEQWrapper(self.layer3, self.layer3_copy)
+        self.deq_layer1 = ResNetToDEQWrapper(self.layer1, self.layer1_copy, n_layer=self.n_layer)
+        self.deq_layer2 = ResNetToDEQWrapper(self.layer2, self.layer2_copy, n_layer=self.n_layer)
+        self.deq_layer3 = ResNetToDEQWrapper(self.layer3, self.layer3_copy, n_layer=self.n_layer)
+
 
     def get_grads(self):
         # just for plots
