@@ -27,6 +27,10 @@ parser.add_argument("--name", type=str, default="N/A",
                         help="experiment name")
 parser.add_argument("--work_dir", default="ResNetexps", type=str,
                     help="experiment directory.")
+parser.add_argument("--save_dir", default="result/preact_resnet110_cifar", type=str,
+                    help="where to save model") 
+parser.add_argument('--resume', default='', type=str, metavar='PATH', 
+                    help='path to latest checkpoint (default: none)')            
 
 parser.add_argument("--seed", type=int, default=228,
                     help="random seed")
@@ -45,8 +49,6 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar=
                     help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', 
                     help='print frequency (default: 10)')
-parser.add_argument('--resume', default='', type=str, metavar='PATH', 
-                    help='path to latest checkpoint (default: none)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', 
                     help='evaluate model on validation set')
 parser.add_argument('-ct', '--cifar-type', default='10', type=int, metavar='CT', 
@@ -109,7 +111,8 @@ def main():
               +  f"pretrain_steps{args.pretrain_steps}" \
               +  f"n_layer{args.n_layer}" \
               +  f"f_thres{args.f_thres}" \
-              +  f"_optim{args.optimizer}"
+              +  f"_optim{args.optimizer}" \
+              +  f"_lr{args.lr}"
     print(f"Experiment name: {args.name}")
     args.work_dir = '{}-{}'.format(args.work_dir, args.cifar_type)
     args.work_dir = os.path.join(args.work_dir, "{}-{}".format(args.name, time.strftime('%Y-%m-%d--%H-%M-%S')))
@@ -173,17 +176,13 @@ def main():
         # mkdir a new folder to store the checkpoint and best model
         if not os.path.exists('result'):
             os.makedirs('result')
-        fdir = 'result/preact_resnet110_cifar'
+        fdir = args.save_dir
         if not os.path.exists(fdir):
             os.makedirs(fdir)
 
         # adjust the lr according to the model type
         if isinstance(model, (ResNet_Cifar, PreAct_ResNet_Cifar, WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar, DEQParResNet)):
             model_type = 1
-        elif isinstance(model, Wide_ResNet_Cifar):
-            model_type = 2
-        elif isinstance(model, (ResNeXt_Cifar, DenseNet_Cifar)):
-            model_type = 3
         else:
             logging('model type unrecognized...')
             return
@@ -343,7 +342,7 @@ def train(trainloader, model, criterion, optimizer, epoch):
         end = time.time()
 
         if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
-            _, debug_info = model.module(input[:1, ...], debug=True)
+            _, debug_info = model.module(input, debug=True)
             if debug_info is not None: # if batch size is correct
                 logging("DEBUG TRAIN:" + debug_info)
 
@@ -362,15 +361,20 @@ def train(trainloader, model, criterion, optimizer, epoch):
                                 top1.val,
                                 train_global_it)
             diffs = model.module.get_diffs()
-            for key in diffs:
-                writer.add_scalar(f'train/diff{key}',
-                            diffs[key].val, 
-                            test_global_it)  
-            grads = model.module.get_diffs()
+            for mode in diffs:
+                diff = diffs[mode]
+                for layer in diff:
+                    meter = diff[layer]
+                    if meter.val is not None:
+                        writer.add_scalar(f'train/{mode}_{layer}',
+                                    meter.val, 
+                                    test_global_it)  
+            grads = model.module.get_grads()
             for key in grads:
-                writer.add_scalar(f'train/grad{key}',
-                            grads[key].val, 
-                            test_global_it)                 
+                if grads[key].val is not None:
+                    writer.add_scalar(f'train/grad{key}',
+                                grads[key].val, 
+                                test_global_it)                 
             train_global_it += 1
             if args.debug and train_global_it >= args.max_train_it:
                 break
@@ -424,10 +428,14 @@ def validate(val_loader, model, criterion):
                                     top1.val,
                                     test_global_it)
                 diffs = model.module.get_diffs()
-                for key in diffs:
-                    writer.add_scalar(f'test/diff{key}',
-                                diffs[key].val, 
-                                test_global_it)
+                for mode in diffs:
+                    diff = diffs[mode]
+                    for layer in diff:
+                        meter = diff[layer]
+                        if meter.val is not None:
+                            writer.add_scalar(f'test/{mode}_{layer}',
+                                        meter.val, 
+                                        test_global_it) 
                 test_global_it += 1
                 if args.debug and test_global_it >= args.max_test_it:
                     break

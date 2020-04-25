@@ -49,6 +49,21 @@ class DEQParResNetLayer(nn.Module):
         return z1ss
 
 
+class DEQMeter(object):
+    def __init__(self, layer):
+        self.grads = AverageMeter()
+        self.forward_diffs = AverageMeter()
+        self.backward_diffs = AverageMeter()
+        self.pretrain_diffs = AverageMeter()
+        self.layer = layer
+
+    def update(self, input):
+        self.grads.update(calc_grad_norm(self.layer), input.size(0))  
+        self.forward_diffs.update(self.layer.info["forward_diffs"])
+        self.backward_diffs.update(self.layer.info["backward_diffs"])
+        self.pretrain_diffs.update(self.layer.info["pretrain_diffs"])
+
+
 class ResNetToDEQWrapper(nn.Module):
     """
     This class is just to reduce code
@@ -60,13 +75,13 @@ class ResNetToDEQWrapper(nn.Module):
         self.func_copy = DEQParResNetLayer(layer_copy)
         self.deq = ParResNetDEQModule(self.func, self.func_copy)
         self.n_layer = n_layer
-        self.grads = AverageMeter()
-        self.diffs = AverageMeter()
+
+        self.meter = DEQMeter(self.layer)
+        
         self.forward_tr = []
 
     def update(self, input):
-        self.grads.update(calc_grad_norm(self), input.size(0))
-        self.diffs.update(self.layer._diffs)
+        self.meter.update(input)
     
     def forward(self, x, f_thres=None, debug=False, pretraining=False):  
         z = torch.zeros_like(x)
@@ -82,7 +97,7 @@ class ResNetToDEQWrapper(nn.Module):
                     self.forward_tr.append((z - prev).norm().item())
                 min_diff = min(min_diff, (z - prev).norm().item())
                 prev = z
-            self.layer._diffs = min_diff
+            self.layer.info["pretrain_diffs"] = min_diff
             return z
         self.layer.reset()
         self.func_copy.copy(self.func)
@@ -115,17 +130,32 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
     def get_grads(self):
         # just for plots
         return {
-            0: self.deq_layer1.grads,
-            1: self.deq_layer2.grads,
-            2: self.deq_layer3.grads
+            0: self.deq_layer1.meter.grads,
+            1: self.deq_layer2.meter.grads,
+            2: self.deq_layer3.meter.grads
         }
     
     def get_diffs(self):
         # just for plots
         return {
-            0: self.deq_layer1.diffs,
-            1: self.deq_layer2.diffs,
-            2: self.deq_layer3.diffs
+            'forward_diffs':
+                {
+                    0: self.deq_layer1.meter.forward_diffs,
+                    1: self.deq_layer2.meter.forward_diffs,
+                    2: self.deq_layer3.meter.forward_diffs
+                },
+            'backward_diffs':
+                {
+                    0: self.deq_layer1.meter.backward_diffs,
+                    1: self.deq_layer2.meter.backward_diffs,
+                    2: self.deq_layer3.meter.backward_diffs
+                },
+            'pretrain_diffs':
+                {
+                    0: self.deq_layer1.meter.pretrain_diffs,
+                    1: self.deq_layer2.meter.pretrain_diffs,
+                    2: self.deq_layer3.meter.pretrain_diffs
+                }
         }
 
     def update_meters(self, input):
@@ -140,9 +170,9 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         x = self.conv1(x)
         x = self.deq_layer1(x, f_thres, debug, do_pretraning)
         x = self.down12(x)
-        x = self.deq_layer2(x, f_thres, debug, do_pretraning)
+        # x = self.deq_layer2(x, f_thres, debug, do_pretraning)
         x = self.down23(x)
-        x = self.deq_layer3(x, f_thres, debug, do_pretraning)
+        # x = self.deq_layer3(x, f_thres, debug, do_pretraning)
         x = self.bn(x)
         x = self.relu(x)
         x = self.avgpool(x)
@@ -152,13 +182,8 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         if not debug:
             return x
         
-        if self.test_mode == "broyden":
-            diffs = self._get_diffs()
-            info = '\n'.join(diffs)
-        else:
-            diffs = [self.deq_layer1.forward_tr, self.deq_layer2.forward_tr, self.deq_layer3.forward_tr]
-            info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-            info = "\n".join(map(str, info.items()))
+        diffs = self._get_diffs()
+        info = '\n'.join(diffs)
         return x, info
         
 def wtii_deq_preact_resnet110_cifar(**kwargs):

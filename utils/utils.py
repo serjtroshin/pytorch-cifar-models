@@ -1,5 +1,6 @@
 from torch import nn
 from .plot_utils import ConvergenceMeter
+import json
 
 class Sequential(nn.Sequential):
     def __init__(self, *args):
@@ -32,6 +33,13 @@ class SequentialLayer(nn.Module):
         super(SequentialLayer, self).__init__()
         self.meter = ConvergenceMeter()
         self.layer = layer
+        self.info = {
+            "pretrain_diffs" : None,
+            "forward_diffs" : None,
+            "backward_diffs" : None,
+            "forward_result_info" : None,
+            "backward_result_info" : None
+        }
 
     def reset(self):
         self.meter.reset()
@@ -41,13 +49,22 @@ class SequentialLayer(nn.Module):
 
     def copy(self, func):
         self.layer.copy(func.layer)
+        self.info = func.info  # shared
 
     def get_diffs(self):
-        if hasattr(self, "_result_info"):
-            return self._result_info
-        if len(self.meter.diffs) == 0:
-            return "None"
-        return self.meter.diffs
+        res = self.info.copy()
+        self.info = {
+            "pretrain_diffs" : None,
+            "forward_diffs" : None,
+            "backward_diffs" : None,
+            "forward_result_info" : None,
+            "backward_result_info" : None
+        }
+        if len(self.meter.diffs) != 0:
+            info = {"pretrain_info" : str(list(map(lambda x : f"{x:.4f}", self.meter.diffs)))}
+            res.update(info)
+            self.meter.reset()
+        return json.dumps(res, sort_keys=True, indent=4)
 
     def forward(self, *input, debug=False):
         input = self.layer(*input)

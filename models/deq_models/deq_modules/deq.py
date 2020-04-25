@@ -34,8 +34,8 @@ class RootFind(Function):
         z1ss_est = result_info['result']
         del result_info['result']
         del result_info['diff_detail']
-        func.layer._result_info = str(result_info)
-        func.layer._diffs = result_info['diff']
+        func.layer.info["forward_result_info"] = str(result_info)
+        func.layer.info["forward_diffs"] = result_info['diff']
             
         if threshold > 100:
             torch.cuda.empty_cache()
@@ -137,6 +137,10 @@ class DEQModule(nn.Module):
 
             result_info = broyden(g, dl_df_est, threshold=threshold, eps=eps, name="backward")
             dl_df_est = result_info['result']
+            del result_info['result']
+            del result_info['diff_detail']
+            func.layer.info["backward_result_info"] = str(result_info)
+            func.layer.info["backward_diffs"] = result_info['diff']
             
             y.backward(torch.zeros_like(dl_df_est), retain_graph=False)
 
