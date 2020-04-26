@@ -87,7 +87,9 @@ parser.add_argument('--max_train_it',  default=1, type=int)
 parser.add_argument('--max_test_it',  default=1, type=int)
 
 parser.add_argument('--test_mode', default="broyden", choices=["broyden", "forward"],
-                    help="mode for test/validation")
+                    help="mode for test/validation (actually should be just 'mode')")
+parser.add_argument('--store_trajs', action='store_true',
+                    help="if store forward trajectories of broyden")
                           
 
 best_prec = 0
@@ -275,7 +277,11 @@ def main():
         testloader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False, num_workers=2)
 
     if args.evaluate:
-        validate(testloader, model, criterion)
+        if args.store_trajs:
+            with open(os.path.join(args.work_dir, "trajs.pkz"), "wb") as f:
+                validate(testloader, model, criterion, store_trajs=f)
+        else:
+            validate(testloader, model, criterion)
         return
 
     for epoch in range(args.start_epoch, args.epochs):
@@ -380,7 +386,7 @@ def train(trainloader, model, criterion, optimizer, epoch):
                 break
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion, store_trajs=None):
     global test_global_it
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -396,7 +402,7 @@ def validate(val_loader, model, criterion):
 
             # compute output
             output = model(input, f_thres=args.f_thres,
-                                        b_thres=args.b_thres)
+                                        b_thres=args.b_thres, store_trajs=store_trajs)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
@@ -409,7 +415,7 @@ def validate(val_loader, model, criterion):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+            if store_trajs is None and i == 0 and isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
                 _, debug_info = model.module(input[:1, ...], debug=True)
                 if debug_info is not None: # if batch size is correct
                     logging("DEBUG TEST:" + debug_info)
@@ -439,6 +445,8 @@ def validate(val_loader, model, criterion):
                 test_global_it += 1
                 if args.debug and test_global_it >= args.max_test_it:
                     break
+            if store_trajs is not None:
+                return
 
     logging(' * Prec {top1.avg:.3f}% '.format(top1=top1))
 

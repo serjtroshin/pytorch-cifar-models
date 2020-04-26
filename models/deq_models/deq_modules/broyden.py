@@ -118,7 +118,9 @@ def matvec(part_Us, part_VTs, x):
     return -x + torch.einsum('bijd, bd -> bij', part_Us, VTx)     # (N, 2d, L'), but should really be (N, (2d*L'), 1)
 
 
-def broyden(g, x0, threshold, eps, ls=False, name="unknown"):
+def broyden(g, x0, threshold, eps, ls=False, name="unknown", store_traj=None):
+    """ store_traj: file with wb mode or None
+    """
     # When doing low-rank updates at a (sub)sequence level, we still only store the low-rank updates, 
     # instead of the huge matrices
     bsz, total_hsize, seq_len = x0.size()
@@ -127,6 +129,8 @@ def broyden(g, x0, threshold, eps, ls=False, name="unknown"):
     gx = g(x_est)        # (bsz, 2d, L')
     nstep = 0
     tnstep = 0
+
+    if store_traj is not None: traj = [x_est.detach().cpu()]
     
     # For fast calculation of inv_jacobian (approximately)
     Us = torch.zeros(bsz, total_hsize, seq_len, threshold)     # One can also use an L-BFGS scheme to further reduce memory
@@ -143,6 +147,7 @@ def broyden(g, x0, threshold, eps, ls=False, name="unknown"):
     while new_objective >= eps and nstep < threshold:
         delta_x, delta_gx, ite = line_search(update, x_est, gx, g, nstep=nstep, on=ls)
         x_est += delta_x
+        if store_traj is not None: traj.append(x_est.detach().cpu())
         gx += delta_gx
         nstep += 1
         tnstep += (ite+1)
@@ -169,6 +174,8 @@ def broyden(g, x0, threshold, eps, ls=False, name="unknown"):
         VTs[:,nstep-1] = vT
         Us[:,:,:,nstep-1] = u
         update = -matvec(Us[:,:,:,:nstep], VTs[:,:nstep], gx)
+    
+    if store_traj is not None: pickle.dump(traj, store_traj)
 
     return {"result": lowest_xest,
             "nstep": nstep,

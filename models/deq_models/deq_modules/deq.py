@@ -23,14 +23,15 @@ class RootFind(Function):
         return RootFind.f(func, z1ss, uss, z0, *args) - z1ss
 
     @staticmethod
-    def broyden_find_root(func, z1ss, uss, z0, eps, *args):
+    def broyden_find_root(func, z1ss, uss, z0, eps, *args, store_traj=None):
         bsz, d_model, seq_len = z1ss.size()
         z1ss_est = z1ss.clone().detach()
         threshold = args[-2]    # Can also set this to be different, based on training/inference
         train_step = args[-1]
+        
 
         g = lambda x: RootFind.g(func, x, uss, z0, *args)
-        result_info = broyden(g, z1ss_est, threshold=threshold, eps=eps, name="forward")
+        result_info = broyden(g, z1ss_est, threshold=threshold, eps=eps, name="forward", store_traj=store_traj)
         z1ss_est = result_info['result']
         del result_info['result']
         del result_info['diff_detail']
@@ -42,13 +43,14 @@ class RootFind(Function):
         return z1ss_est.clone().detach()
 
     @staticmethod
-    def forward(ctx, func, z1ss, uss, z0, *args, **kwargs):
-        use_broyden = kwargs.get("method", True) # TODO USE BROYDEN
+    def forward(ctx, func, z1ss, uss, z0, *args):
+        use_broyden = True # TODO USE BROYDEN
         bsz, d_model, seq_len = z1ss.size()
         eps = 1e-6 * np.sqrt(bsz * seq_len * d_model)
         threshold = args[-2]    # Can also set this to be different, based on training/inference
         train_step = args[-1]
         debug = args[-3]
+        store_traj = args[-4]
         root_find = RootFind.broyden_find_root
         ctx.args_len = len(args)
         def norm(z):
@@ -59,7 +61,7 @@ class RootFind(Function):
             return (z1 * z2).sum() / (z1 * z1).sum()**0.5 / (z2 * z2).sum()**0.5
         with torch.no_grad():
             if use_broyden:
-                z1ss_est = root_find(func, z1ss, uss, z0, eps, *args)   # args include pos_emb, threshold, train_step
+                z1ss_est = root_find(func, z1ss, uss, z0, eps, *args, store_traj=store_traj)   # args include pos_emb, threshold, train_step
             else:
                 for i in range(threshold): # todo
                     z1ss = func(z1ss, uss, z0, debug=debug)

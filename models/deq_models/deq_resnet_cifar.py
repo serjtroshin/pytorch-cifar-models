@@ -83,7 +83,7 @@ class ResNetToDEQWrapper(nn.Module):
     def update(self, input):
         self.meter.update(input)
     
-    def forward(self, x, f_thres=None, debug=False, pretraining=False):  
+    def forward(self, x, f_thres=None, debug=False, pretraining=False, store_trajs=None):  
         z = torch.zeros_like(x)
         if debug:
             self.forward_tr = []
@@ -103,7 +103,7 @@ class ResNetToDEQWrapper(nn.Module):
         self.func_copy.copy(self.func)
         z1s = self.func.img2seq(z)
         us = self.func.img2seq(x)
-        z1s = self.deq(z1s, us, None, threshold=f_thres, debug=debug)
+        z1s = self.deq(z1s, us, None, threshold=f_thres, debug=debug, store_trajs=store_trajs)
         z = self.func.seq2img(z1s)
         return z
 
@@ -164,15 +164,15 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         self.deq_layer2.update(input)
         self.deq_layer3.update(input)
 
-    def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False):
+    def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False, store_trajs=None):
 
         do_pretraning = 0 <= train_step < self.pretrain_steps or self.test_mode == "forward"
         x = self.conv1(x)
-        x = self.deq_layer1(x, f_thres, debug, do_pretraning)
+        x = self.deq_layer1(x, f_thres, debug, do_pretraning, store_trajs)
         x = self.down12(x)
-        # x = self.deq_layer2(x, f_thres, debug, do_pretraning)
+        # x = self.deq_layer2(x, f_thres, debug, do_pretraning, store_trajs)
         x = self.down23(x)
-        # x = self.deq_layer3(x, f_thres, debug, do_pretraning)
+        # x = self.deq_layer3(x, f_thres, debug, do_pretraning, store_trajs)
         x = self.bn(x)
         x = self.relu(x)
         x = self.avgpool(x)
