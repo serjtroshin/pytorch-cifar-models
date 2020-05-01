@@ -30,7 +30,10 @@ parser.add_argument("--work_dir", default="ResNetexps", type=str,
 parser.add_argument("--save_dir", default="result/preact_resnet110_cifar", type=str,
                     help="where to save model") 
 parser.add_argument('--resume', default='', type=str, metavar='PATH', 
-                    help='path to latest checkpoint (default: none)')            
+                    help='path to latest checkpoint (default: none)')   
+parser.add_argument('--load_optim', action="store_true",
+                    help='should optimizer state be loaded')           
+         
 
 parser.add_argument("--seed", type=int, default=228,
                     help="random seed")
@@ -160,6 +163,8 @@ def main():
             n_layer=args.n_layer,
             test_mode=args.test_mode,
         )
+        # model = preact_resnet110_cifar(num_classes=10, inplanes=16)
+
         # model = deq_parresnet110_cifar(18, 
         #                                 pretrain_steps=args.pretrain_steps, 
         #                                 n_layer=args.n_layer, 
@@ -207,7 +212,8 @@ def main():
             args.start_epoch = checkpoint['epoch']
             best_prec = checkpoint['best_prec']
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            if args.load_optim:
+                optimizer.load_state_dict(checkpoint['optimizer'])
             logging("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
         else:
             logging("=> no checkpoint found at '{}'".format(args.resume))
@@ -340,7 +346,8 @@ def train(trainloader, model, criterion, optimizer, epoch):
         loss.backward()
         if args.clip is not None:
             nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-        model.module.update_meters(input)
+        if isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+            model.module.update_meters(input)
         optimizer.step()
 
         # measure elapsed time
@@ -366,21 +373,22 @@ def train(trainloader, model, criterion, optimizer, epoch):
             writer.add_scalar('train/top1', 
                                 top1.val,
                                 train_global_it)
-            diffs = model.module.get_diffs()
-            for mode in diffs:
-                diff = diffs[mode]
-                for layer in diff:
-                    meter = diff[layer]
-                    if meter.val is not None:
-                        writer.add_scalar(f'train/{mode}_{layer}',
-                                    meter.val, 
-                                    test_global_it)  
-            grads = model.module.get_grads()
-            for key in grads:
-                if grads[key].val is not None:
-                    writer.add_scalar(f'train/grad{key}',
-                                grads[key].val, 
-                                test_global_it)                 
+            if isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+                diffs = model.module.get_diffs()
+                for mode in diffs:
+                    diff = diffs[mode]
+                    for layer in diff:
+                        meter = diff[layer]
+                        if meter.val is not None:
+                            writer.add_scalar(f'train/{mode}_{layer}',
+                                        meter.val, 
+                                        test_global_it)  
+                grads = model.module.get_grads()
+                for key in grads:
+                    if grads[key].val is not None:
+                        writer.add_scalar(f'train/grad{key}',
+                                    grads[key].val, 
+                                    test_global_it)                 
             train_global_it += 1
             if args.debug and train_global_it >= args.max_train_it:
                 break
@@ -409,7 +417,8 @@ def validate(val_loader, model, criterion, store_trajs=None):
             prec = accuracy(output, target)[0]
             losses.update(loss.item(), input.size(0))
             top1.update(prec.item(), input.size(0))
-            model.module.update_meters(input)
+            if isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+                model.module.update_meters(input)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -433,15 +442,16 @@ def validate(val_loader, model, criterion, store_trajs=None):
                 writer.add_scalar('test/top1',
                                     top1.val,
                                     test_global_it)
-                diffs = model.module.get_diffs()
-                for mode in diffs:
-                    diff = diffs[mode]
-                    for layer in diff:
-                        meter = diff[layer]
-                        if meter.val is not None:
-                            writer.add_scalar(f'test/{mode}_{layer}',
-                                        meter.val, 
-                                        test_global_it) 
+                if isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
+                    diffs = model.module.get_diffs()
+                    for mode in diffs:
+                        diff = diffs[mode]
+                        for layer in diff:
+                            meter = diff[layer]
+                            if meter.val is not None:
+                                writer.add_scalar(f'test/{mode}_{layer}',
+                                            meter.val, 
+                                            test_global_it) 
                 test_global_it += 1
                 if args.debug and test_global_it >= args.max_test_it:
                     break

@@ -126,6 +126,10 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         self.deq_layer2 = ResNetToDEQWrapper(self.layer2, self.layer2_copy, n_layer=self.n_layer)
         self.deq_layer3 = ResNetToDEQWrapper(self.layer3, self.layer3_copy, n_layer=self.n_layer)
 
+        print('=' * 100)
+        n_all_params_layer1 = sum([p.nelement() for p in self.layer1.parameters() if p.requires_grad])
+        print(f'#true params layer1 = {n_all_params_layer1}')
+
 
     def get_grads(self):
         # just for plots

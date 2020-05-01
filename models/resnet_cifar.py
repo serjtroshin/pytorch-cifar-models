@@ -286,17 +286,18 @@ class ResNet_Cifar(nn.Module):
 
 class PreAct_ResNet_Cifar(nn.Module):
 
-    def __init__(self, block, layers, num_classes=10):
+    def __init__(self, block, layers, num_classes=10, inplanes=16):
         super(PreAct_ResNet_Cifar, self).__init__()
-        self.inplanes = 16
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.layer1 = self._make_layer(block, 16, layers[0])
-        self.layer2 = self._make_layer(block, 32, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 64, layers[2], stride=2)
-        self.bn = nn.BatchNorm2d(64*block.expansion)
+        self.inplanes = inplanes
+        self.conv1 = nn.Conv2d(3, inplanes, kernel_size=3, stride=1, padding=1, bias=False)
+        skip_block = True # set true is use only one block (experimental purpose only)
+        self.layer1 = self._make_layer(block, inplanes, layers[0])
+        self.layer2 = self._make_layer(block, inplanes * 2, layers[1], stride=2, skip_block=skip_block)
+        self.layer3 = self._make_layer(block, inplanes * 4, layers[2], stride=2, skip_block=skip_block)
+        self.bn = nn.BatchNorm2d(inplanes*4*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
-        self.fc = nn.Linear(64*block.expansion, num_classes)
+        self.fc = nn.Linear(inplanes*4*block.expansion, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -306,13 +307,15 @@ class PreAct_ResNet_Cifar(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1, skip_block=False):
         downsample = None
         if stride != 1 or self.inplanes != planes*block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes*block.expansion, kernel_size=1, stride=stride, bias=False)
             )
-
+        if skip_block:
+            self.inplanes = planes*block.expansion
+            return downsample
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes*block.expansion
@@ -320,7 +323,7 @@ class PreAct_ResNet_Cifar(nn.Module):
             layers.append(block(self.inplanes, planes))
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = self.conv1(x)
 
         x = self.layer1(x)
@@ -482,13 +485,12 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_resnet110_cifar(wnorm=True, inplanes=32 + 10)
+    net = preact_resnet110_cifar(num_classes=10, inplanes=5)
     # net = preact_resnet110_cifar()
 
-    y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
+    y = net(torch.randn(1, 3, 32, 32))
     print(net)
     print(y.size())
-    n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
+    n_all_param = sum([p.nelement() for p in net.layer1.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
-    print(diffs)
 
