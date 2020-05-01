@@ -382,10 +382,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
     def wnorm(self):
         # wnorm
-        raise NotImplemented # update for deq func_copy
-        # self.down01.wnorm()
-        self.down12.wnorm()
-        self.down23.wnorm()
+        # raise NotImplemented # update for deq func_copy
         self.layer1.wnorm()
         self.layer2.wnorm()
         self.layer3.wnorm()

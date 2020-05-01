@@ -195,7 +195,7 @@ def wtii_deq_preact_resnet110_cifar(**kwargs):
     return model
 
 if __name__=="__main__":
-    net = wtii_deq_preact_resnet110_cifar(wnorm=False, inplanes=32 + 10)
+    net = wtii_deq_preact_resnet110_cifar(wnorm=True, inplanes=32 + 10)
     # net = preact_resnet110_cifar()
     # print(net)
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True, train_step=-1)

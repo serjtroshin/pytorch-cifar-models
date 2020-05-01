@@ -155,7 +155,7 @@ def main():
         #                                        inplanes=args.inplanes,
         #                                        track_running_stats=args.track_running_stats,
         #                                        layers=args.layers)
-        model = wtii_deq_preact_resnet110_cifar(wnorm = False, 
+        model = wtii_deq_preact_resnet110_cifar(wnorm=args.wnorm, 
             pretrain_steps=args.pretrain_steps,
             inplanes=args.inplanes,
             norm_func=args.norm_func,

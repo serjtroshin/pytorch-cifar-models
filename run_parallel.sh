@@ -22,23 +22,22 @@ for optim in adam
 do
 for lr in 0.01 0.001
 do
-for prelr in 0.01 0.001
-do
 for mode in ''
 do
-    sbatch -c 3 -G 1 -t 4320 run.sh --epoch 160 --batch-size 128 -ct 10 \
-    --name exp.$mode.$lr.$prelr. \
+    prelr=$lr
+    sbatch -c 3 -G 1 -t 6320 run.sh --epoch 160 --batch-size 128 -ct 10 \
+    --name exp.$mode.$lr.$prelr.track \
     --optimizer $optim \
     --lr $lr \
     --pretrain_steps 0 \
     --test_mode broyden \
     --inplanes 64 \
     --resume pretrained_models/pretrained_5layer_oneblock64.$optim.$prelr/checkpoint.pth \
-    --work_dir experiments/$work_dir $mode
-done
+    --work_dir experiments/$work_dir $mode \
+    --track_running_stats
 done
 done
 done
 
-tensorboard dev upload --logdir experiments/$work_dir-10
+# tensorboard dev upload --logdir experiments/$work_dir-10
 
