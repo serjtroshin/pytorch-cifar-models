@@ -102,6 +102,7 @@ class DEQModule(nn.Module):
             self.Backward.apply(self.func_copy, ...)
             
         """
+        _need_grad_wrt_us = True
         @staticmethod
         def forward(ctx, func_copy, z1ss, uss, z0, *args):
             ctx.save_for_backward(z1ss, uss, z0)
@@ -109,8 +110,8 @@ class DEQModule(nn.Module):
             ctx.args = args
             return z1ss
 
-        @staticmethod
-        def backward(ctx, grad):
+        @classmethod
+        def backward(cls, ctx, grad):
             torch.cuda.empty_cache()
 
             # grad should have dimension (bsz x d_model x seq_len)
@@ -147,4 +148,4 @@ class DEQModule(nn.Module):
             y.backward(torch.zeros_like(dl_df_est), retain_graph=False)
 
             grad_args = [None for _ in range(len(args))]
-            return (None, dl_df_est, dl_df_est, None, *grad_args)
+            return (None, dl_df_est, dl_df_est if cls._need_grad_wrt_us else None, None, *grad_args)

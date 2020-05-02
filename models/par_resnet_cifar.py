@@ -52,6 +52,10 @@ class PreActBasicParBlock(nn.Module):
         self.conv1, self.conv1_fn = weight_norm(module=self.conv1, names=['weight'], dim=0)
         self.conv2, self.conv2_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
 
+    def copy(self, func):
+        self.conv1.weight.data = func.conv1.weight.data.clone()
+        self.conv2.weight.data = func.conv2.weight.data.clone()
+
     def reset(self):
         if 'conv1_fn' in self.__dict__:
             self.conv1_fn.reset(self.conv1)
@@ -94,8 +98,12 @@ class TransitionBlock(nn.Module):
                 if '_fn' in self.net[i].__dict__:
                    module._fn.reset(module)
 
+    def copy(self, func):
+        self.net[2].weight.data = func.net[2].weight.data.clone()
+
     def __init__(self, inplanes, planes, norm_func=nn.BatchNorm2d, layers=2, transition_f=conv3x3):
         super(TransitionBlock, self).__init__()
+        assert layers == 1, "todo make copy for layers = 2"
         inter_planes = (inplanes + planes) // 2
         inter_layers = layers - 2
         net = []
@@ -162,11 +170,11 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         self.transitions[1][1] = self._make_cell(block, inplanes*2, inplanes*2)  # 16x16x32
         self.transitions[2][2] = self._make_cell(block, inplanes*4, inplanes*4)  #   8x8x64
         self.transitions[0][1] = self._make_transition(down_block, inplanes, inplanes*2, 1)
-        self.transitions[0][2] = self._make_transition(down_block, inplanes, inplanes*4, 2)
+        # self.transitions[0][2] = self._make_transition(down_block, inplanes, inplanes*4, 2)
         self.transitions[1][2] = self._make_transition(down_block, inplanes*2, inplanes*4, 1)
-        self.transitions[1][0] = self._make_transition(up_block, inplanes*2, inplanes, 1)
-        self.transitions[2][0] = self._make_transition(up_block, inplanes*4, inplanes, 2)
-        self.transitions[2][1] = self._make_transition(up_block, inplanes*4, inplanes*2, 1)
+        # self.transitions[1][0] = self._make_transition(up_block, inplanes*2, inplanes, 1)
+        # self.transitions[2][0] = self._make_transition(up_block, inplanes*4, inplanes, 2)
+        # self.transitions[2][1] = self._make_transition(up_block, inplanes*4, inplanes*2, 1)
 
         self.layer = self._make_layer(self.transitions, inplanes)
 
@@ -198,12 +206,22 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
     def wnorm(self):
         for row in self.transitions:
             for elem in row:
-                elem.wnorm()
+                if elem is not None:
+                    elem.wnorm()
 
     def reset(self):
         for row in self.transitions:
             for elem in row:
-                elem.reset()
+                if elem is not None:
+                    elem.reset()
+
+    def copy(self, func):
+        self.layer.copy(func.layer)
+
+    def _get_diffs(self):
+        info = self.layer.get_diffs()
+        diffs = [info]
+        return diffs
 
     def forward(self, x, debug=False):
         self.layer.reset()
@@ -240,7 +258,7 @@ def wtii_preact_parresnet110_cifar(layers=18, **kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet110_cifar(inplanes=47, wnorm=True)
+    net = wtii_preact_parresnet110_cifar(inplanes=47, wnorm=False)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)

@@ -4,7 +4,7 @@ from models.deq_models.deq_modules.deq import *
 
 from models.resnet_cifar import WTIIPreAct_ResNet_Cifar, IIPreActBasicBlock
 from models.deq_models.deq_resnet_cifar_module import ParResNetDEQModule
-from utils.plot_utils import AverageMeter, calc_grad_norm
+from utils.plot_utils import AverageMeter, calc_grad_norm, DEQMeter
 
 
 class DEQParResNetLayer(nn.Module):
@@ -47,21 +47,6 @@ class DEQParResNetLayer(nn.Module):
         z1ss = self.img2seq(z)
         uss = self.img2seq(x)
         return z1ss
-
-
-class DEQMeter(object):
-    def __init__(self, layer):
-        self.grads = AverageMeter()
-        self.forward_diffs = AverageMeter()
-        self.backward_diffs = AverageMeter()
-        self.pretrain_diffs = AverageMeter()
-        self.layer = layer
-
-    def update(self, input):
-        self.grads.update(calc_grad_norm(self.layer), input.size(0))  
-        self.forward_diffs.update(self.layer.info["forward_diffs"])
-        self.backward_diffs.update(self.layer.info["backward_diffs"])
-        self.pretrain_diffs.update(self.layer.info["pretrain_diffs"])
 
 
 class ResNetToDEQWrapper(nn.Module):

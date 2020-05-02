@@ -60,3 +60,18 @@ def logging(s, log_path, print_=True, log_=True):
             
 def get_logger(log_path, **kwargs):
     return functools.partial(logging, log_path=log_path, **kwargs)
+
+
+class DEQMeter(object):
+    def __init__(self, layer):
+        self.grads = AverageMeter()
+        self.forward_diffs = AverageMeter()
+        self.backward_diffs = AverageMeter()
+        self.pretrain_diffs = AverageMeter()
+        self.layer = layer
+
+    def update(self, input):
+        self.grads.update(calc_grad_norm(self.layer), input.size(0))  
+        self.forward_diffs.update(self.layer.info["forward_diffs"])
+        self.backward_diffs.update(self.layer.info["backward_diffs"])
+        self.pretrain_diffs.update(self.layer.info["pretrain_diffs"])
