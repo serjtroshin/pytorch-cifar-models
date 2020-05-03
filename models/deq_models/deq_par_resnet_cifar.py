@@ -68,14 +68,14 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
 
     def update_meters(self, input):
         # just for plots
-        self.layer.update(input)
+        self.meter.update(input)
 
     def get_grads(self):
         # just for plots
         return {
-            0: self.func.layer.meter.grads,
-            1: self.func.layer.meter.grads,
-            2: self.func.layer.meter.grads
+            0: self.meter.grads,
+            1: self.meter.grads,
+            2: self.meter.grads
         }
     
     def get_diffs(self):
@@ -83,15 +83,15 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
         return {
             'forward_diffs':
                 {
-                    0: self.func.layer.meter.forward_diffs,
+                    0: self.meter.forward_diffs,
                 },
             'backward_diffs':
                 {
-                    0: self.func.layer.meter.backward_diffs,
+                    0: self.meter.backward_diffs,
                 },
             'pretrain_diffs':
                 {
-                    0: self.func.layer.meter.pretrain_diffs,
+                    0: self.meter.pretrain_diffs,
                 }
         }
 

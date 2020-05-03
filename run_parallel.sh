@@ -24,16 +24,15 @@ do
 for lr in 0.01
 do
     prelr=$lr
-    sbatch -c 3 -G 1 -t 6320 run.sh --epoch 160 --batch-size 128 -ct 10 \
-    --name exp.$mode.$lr.$prelr.track_running_stats_pretraining \
+    bash run.sh --epoch 160 --batch-size 128 -ct 10 \
+    --name exp.$mode.$lr \
     --optimizer $optim \
     --lr $lr \
-    --pretrain_steps 0 \
+    --pretrain_steps 20 \
     --test_mode broyden \
-    --inplanes 64 \
+    --inplanes 16 \
     --track_running_stats \
-    --resume pretrained_models/pretrained_5layer_oneblock64.$optim.$prelr.track_running_stats/checkpoint.pth \
-    --work_dir experiments/$work_dir $mode 
+    --work_dir experiments/$work_dir
 done
 done
 
