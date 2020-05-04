@@ -19,11 +19,11 @@ class DEQParResNetLayer(nn.Module):
         bs, ch, hw = z1ss.shape
         z1sh, z2sh, z3sh = self.shapes
         z1 = z1ss[:, :, :z1sh[2]*z1sh[3]].reshape((bs, ch, z1sh[2], z1sh[3]))  # 16, 32, 32
-        assert z1.shape == (bs, 16, 32, 32)
+        #assert z1.shape == (bs, 16, 32, 32)
         z2 = z1ss[:, :, z1sh[2]*z1sh[3]:  z1sh[2]*z1sh[3] + z2sh[2]*z2sh[3]*2].reshape(bs, ch * 2, z2sh[2], z2sh[3]) # 32, 16, 16
-        assert z2.shape == (bs, 32, 16, 16)
+        #assert z2.shape == (bs, 32, 16, 16)
         z3 = z1ss[:, :, z1sh[2]*z1sh[3] + z2sh[2]*z2sh[3]*2:].reshape(bs, ch * 4, z3sh[2], z3sh[3]) # 64, 8, 8
-        assert z3.shape == (bs, 64, 8, 8)
+        #assert z3.shape == (bs, 64, 8, 8)
         return z1, z2, z3
 
     def img2seq(self, z1, z2, z3):
@@ -153,11 +153,14 @@ def deq_parresnet110_cifar(layers=18, **kwargs):
     return model
 
 if __name__=="__main__":
-    net = deq_parresnet110_cifar(18, pretrain_steps=10, n_layer=3)
+    net = deq_parresnet110_cifar(18, pretrain_steps=10, n_layer=3, inplanes=61)
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True, train_step=-1)
     print(y.size())
+
+    del net.func_copy  # only a copy of parameters (not nes)
+    del net.deq
     n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
     print(diffs)
 
-    y.mean().backward()
+    # y.mean().backward()

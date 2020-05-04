@@ -27,6 +27,7 @@ class Parallel(nn.Module):
             meter.reset() # do not forget to reset
 
     def copy(self, func):
+        self.info = func.info  # shared
         for i in range(self._n):
             for j in range(self._m):
                 elem1 = getattr(self, f'transition_f_{i}_{j}')

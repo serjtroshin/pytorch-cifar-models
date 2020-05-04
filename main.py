@@ -382,13 +382,13 @@ def train(trainloader, model, criterion, optimizer, epoch):
                         if meter.val is not None:
                             writer.add_scalar(f'train/{mode}_{layer}',
                                         meter.val, 
-                                        test_global_it)  
+                                        train_global_it)  
                 grads = model.module.get_grads()
                 for key in grads:
                     if grads[key].val is not None:
                         writer.add_scalar(f'train/grad{key}',
                                     grads[key].val, 
-                                    test_global_it)                 
+                                    train_global_it)                 
             train_global_it += 1
             if args.debug and train_global_it >= args.max_train_it:
                 break
