@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/home/sergey/pytorch-cifar-models/deq/bin/python3.7",
+    "python.pythonPath": "/home/stroshin/anaconda3/envs/deq_2/bin/python",
     "files.watcherExclude": {
         "**/.git/objects/**": true,
         "**/.git/subtree-cache/**": true,

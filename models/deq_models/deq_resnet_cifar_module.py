@@ -27,5 +27,6 @@ class ParResNetDEQModule(DEQModule):
         z1s_out = RootFind.apply(self.func, z1s, us, z0, store_trajs, debug, threshold, train_step)
         if self.training:
             z1s_out = RootFind.f(self.func, z1s_out, us, z0, threshold, train_step)
+            self.Backward._need_grad_wrt_us = True
             z1s_out = self.Backward.apply(self.func_copy, z1s_out, us, z0, threshold, train_step)
         return z1s_out
