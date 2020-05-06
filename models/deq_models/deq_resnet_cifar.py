@@ -113,7 +113,9 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
 
         print('=' * 100)
         n_all_params_layer1 = sum([p.nelement() for p in self.layer1.parameters() if p.requires_grad])
-        print(f'#true params layer1 = {n_all_params_layer1}')
+        n_all_params_layer2 = sum([p.nelement() for p in self.layer2.parameters() if p.requires_grad])
+        n_all_params_layer3 = sum([p.nelement() for p in self.layer3.parameters() if p.requires_grad])
+        print(f'#true params = {n_all_params_layer1 + n_all_params_layer2 + n_all_params_layer3}')
 
 
     def get_grads(self):
