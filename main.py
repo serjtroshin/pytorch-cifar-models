@@ -29,6 +29,8 @@ parser.add_argument("--work_dir", default="ResNetexps", type=str,
                     help="experiment directory.")
 parser.add_argument("--save_dir", default="result/preact_resnet110_cifar", type=str,
                     help="where to save model") 
+parser.add_argument("--model_type", choices=["wtii_deq_preact_resnet110_cifar", "deq_parresnet110_cifar"],
+                    help="type of the model (sequential, parallel)")
 parser.add_argument('--resume', default='', type=str, metavar='PATH', 
                     help='path to latest checkpoint (default: none)')   
 parser.add_argument('--load_optim', action="store_true",
@@ -93,6 +95,7 @@ parser.add_argument('--test_mode', default="broyden", choices=["broyden", "forwa
                     help="mode for test/validation (actually should be just 'mode')")
 parser.add_argument('--store_trajs', action='store_true',
                     help="if store forward trajectories of broyden")
+
                           
 
 best_prec = 0
@@ -140,22 +143,9 @@ def main():
         # model can be set to anyone that I have defined in models folder
         # note the model should match to the cifar type !
 
-        # model = resnet20_cifar()
-        # model = resnet32_cifar()
-        # model = resnet44_cifar()
-        # model = resnet110_cifar()
-        # model = wtii_preact_resnet110_cifar(wnorm=args.wnorm, 
-        #                                     norm_func=args.norm_func, 
-        #                                     identity_mapping=args.identity_mapping,
-        #                                     inplanes=args.inplanes,
-        #                                     dropout=args.dropout)
-        # model = wtii_preact_parresnet110_cifar(wnorm=args.wnorm, 
-        #                                        norm_func=args.norm_func, 
-        #                                        identity_mapping=args.identity_mapping,
-        #                                        inplanes=args.inplanes,
-        #                                        track_running_stats=args.track_running_stats,
-        #                                        layers=args.layers)
-        model = deq_parresnet110_cifar(wnorm=args.wnorm, 
+        # wtii_deq_preact_resnet110_cifar
+        #deq_parresnet110_cifar
+        model = eval(args.model_type)(wnorm=args.wnorm, 
             pretrain_steps=args.pretrain_steps,
             inplanes=args.inplanes,
             norm_func=args.norm_func,
@@ -164,21 +154,6 @@ def main():
             test_mode=args.test_mode,
         )
         # model = preact_resnet110_cifar(num_classes=10, inplanes=16)
-
-        # model = deq_parresnet110_cifar(18, 
-        #                                 pretrain_steps=args.pretrain_steps, 
-        #                                 n_layer=args.n_layer, 
-        #                                 )
-        # model = resnet164_cifar(num_classes=100)
-        # model = resnet1001_cifar(num_classes=100)
-        # model = preact_resnet164_cifar(num_classes=100)
-        # model = preact_resnet1001_cifar(num_classes=100)
-
-        # model = wide_resnet_cifar(depth=26, width=10, num_classes=100)
-
-        # model = resneXt_cifar(depth=29, cardinality=16, baseWidth=64, num_classes=100)
-        
-        #model = densenet_BC_cifar(depth=190, k=40, num_classes=100)
 
         # mkdir a new folder to store the checkpoint and best model
         if not os.path.exists('result'):

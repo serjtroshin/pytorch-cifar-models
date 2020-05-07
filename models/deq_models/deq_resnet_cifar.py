@@ -73,6 +73,8 @@ class ResNetToDEQWrapper(nn.Module):
         if debug:
             self.forward_tr = []
         if pretraining:
+            if store_trajs is not None:
+                traj = [z.cpu().detach()]
             self.layer.reset()
             min_diff = 1e10
             prev = z
@@ -82,7 +84,10 @@ class ResNetToDEQWrapper(nn.Module):
                     self.forward_tr.append((z - prev).norm().item())
                 min_diff = min(min_diff, (z - prev).norm().item())
                 prev = z
+                if store_trajs is not None:
+                    traj.append(z.cpu().detach())
             self.layer.info["pretrain_diffs"] = min_diff
+            if store_trajs is not None: pickle.dump(traj, store_trajs)
             return z
         self.layer.reset()
         self.func_copy.copy(self.func)
