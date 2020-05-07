@@ -23,23 +23,23 @@ work_dir=DEQsequential-3midplanes
 # done
 
 
-name=sequential_forward
-for opt in sgd
+name=sequential_broyden
+for opt in adam
 do
-for lr in 0.1
+for lr in 0.01
 do
-bash run.sh --epoch 160 --batch-size 64 -ct 10 \
+bash run.sh --epoch 160 --batch-size 128 -ct 10 \
 --name $name \
 --optimizer $opt --lr $lr \
---test_mode forward \
---n_layer 18 \
+--test_mode broyden \
+--n_layer 5 \
 --inplanes 16 \
 --midplanes 100 \
---pretrain_steps 200000 \
+--pretrain_steps 50 \
 --work_dir experiments/$work_dir \
 --track_running_stats \
 --save_dir result/$work_dir.$name.$opt.$lr.inplanes16.midplanes100
 done
-done
+done &
 
-# tensorboard dev upload --logdir experiments/$work_dir-10
+tensorboard dev upload --logdir experiments/$work_dir-10
