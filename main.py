@@ -93,6 +93,8 @@ parser.add_argument('--test_mode', default="broyden", choices=["broyden", "forwa
                     help="mode for test/validation (actually should be just 'mode')")
 parser.add_argument('--store_trajs', action='store_true',
                     help="if store forward trajectories of broyden")
+
+parser.add_argument('--midplanes', default=16, type=int)
                           
 
 best_prec = 0
@@ -155,9 +157,10 @@ def main():
         #                                        inplanes=args.inplanes,
         #                                        track_running_stats=args.track_running_stats,
         #                                        layers=args.layers)
-        model = deq_parresnet110_cifar(wnorm=args.wnorm, 
+        model = wtii_deq_preact_resnet110_cifar(wnorm=args.wnorm, 
             pretrain_steps=args.pretrain_steps,
             inplanes=args.inplanes,
+            midplanes=args.midplanes,
             norm_func=args.norm_func,
             track_running_stats=args.track_running_stats,
             n_layer=args.n_layer,

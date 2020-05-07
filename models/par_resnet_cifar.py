@@ -258,13 +258,12 @@ def wtii_preact_parresnet110_cifar(layers=18, **kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet110_cifar(inplanes=47, wnorm=False)
+    net = wtii_preact_parresnet110_cifar(inplanes=16, wnorm=False)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
     print(y.size())
     n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
-    info = {"layer" + str(i) : list(map(lambda x : f"{x:.4f}", x)) for i, x in enumerate(diffs)}
-    print("\n".join(map(str, info.items())))
+    print(diffs)
 
