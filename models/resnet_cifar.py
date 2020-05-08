@@ -100,16 +100,16 @@ class Bottleneck(nn.Module):
 class IIPreActBasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, 
+    def __init__(self, inplanes, midplanes, planes, stride=1, downsample=None, 
                     norm_func=nn.InstanceNorm2d, identity_mapping=False,
                     dropout=0.0):
         super(IIPreActBasicBlock, self).__init__()
         self.dropout = VariationalDropout(dropout) # input dropout
         self.bn1 = norm_func(inplanes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = conv3x3(inplanes * 2, planes, stride)
-        self.bn2 = norm_func(planes)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv1 = conv3x3(inplanes * 2, midplanes, stride)
+        self.bn2 = norm_func(midplanes)
+        self.conv2 = conv3x3(midplanes, planes)
         if not identity_mapping:
             self.norml = norm_func(planes)
         self.downsample = downsample
@@ -349,6 +349,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         wnorm=kwargs.get("wnorm", False) # weight normalization
         self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
         self.inplanes=kwargs.get("inplanes", 16)
+        midplanes=kwargs.get("midplanes", 16)
         self.dropout=kwargs.get("dropout", 0.0)
         inplanes = self.inplanes
 
@@ -356,14 +357,14 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
         tmp = self.inplanes
-        _, self.layer1 = self._make_layer(block, inplanes, layers[0])
-        self.down12, self.layer2 = self._make_layer(block, inplanes*2, layers[1], stride=2)
-        self.down23, self.layer3 = self._make_layer(block, inplanes*4, layers[2], stride=2)
+        _, self.layer1 = self._make_layer(block, midplanes, inplanes, layers[0])
+        self.down12, self.layer2 = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2)
+        self.down23, self.layer3 = self._make_layer(block, midplanes*4, inplanes*4, layers[2], stride=2)
         if copy_layers:
             self.inplanes = tmp
-            _, self.layer1_copy = self._make_layer(block, inplanes, layers[0])
-            _, self.layer2_copy = self._make_layer(block, inplanes*2, layers[1], stride=2)
-            _, self.layer3_copy = self._make_layer(block, inplanes*4, layers[2], stride=2)
+            _, self.layer1_copy = self._make_layer(block, midplanes, inplanes, layers[0])
+            _, self.layer2_copy = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2)
+            _, self.layer3_copy = self._make_layer(block, midplanes*4, inplanes*4, layers[2], stride=2)
         self.bn = self.norm_func(inplanes*4*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
@@ -387,7 +388,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.layer2.wnorm()
         self.layer3.wnorm()
 
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, midplanes, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes*block.expansion:
             downsample = nn.Sequential(
@@ -400,7 +401,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.inplanes = planes*block.expansion
 
         layers.append(SequentialLayer(
-                        block(self.inplanes, planes, 
+                        block(self.inplanes, midplanes, planes, 
                             norm_func=self.norm_func, 
                             identity_mapping=self.identity_mapping,
                             dropout=self.dropout)))
@@ -416,8 +417,30 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         return diffs
 
     def forward(self, x, debug=False, **kwargs):
-        # see deq_resnet_cifar
-        raise NotImplemented
+        x = self.conv1(x)
+        z = torch.zeros_like(x)
+        for i in range(self.layer1.layers):
+            z, _ = self.layer1(z, x, debug=debug)
+        x = self.down12(z)
+        z = torch.zeros_like(x)
+        for i in range(self.layer2.layers):
+            z, _ = self.layer2(z, x, debug=debug)
+        x = self.down23(z)
+        z = torch.zeros_like(x)
+        for i in range(self.layer3.layers):
+            z, _ = self.layer3(z, x, debug=debug)
+        x = self.bn(z)
+        x = self.relu(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        
+        if not debug:
+            return x
+        
+        diffs = self._get_diffs()
+        info = '\n'.join(diffs)
+        return x, info
 
 
 
@@ -482,7 +505,7 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = preact_resnet110_cifar(num_classes=10, inplanes=5)
+    net = wtii_preact_resnet110_cifar(num_classes=10, inplanes=16, midplanes=32)
     # net = preact_resnet110_cifar()
 
     y = net(torch.randn(1, 3, 32, 32))
