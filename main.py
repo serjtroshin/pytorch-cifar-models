@@ -114,13 +114,14 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
-    args.name += f"_norm_func{args.norm_func}" \
-              +  f"_inplanes{args.inplanes}" \
-              +  f"_track_running_stats{args.track_running_stats}" \
-              +  f"_wnorm{args.wnorm}" \
-              +  f"pretrain_steps{args.pretrain_steps}" \
-              +  f"n_layer{args.n_layer}" \
-              +  f"f_thres{args.f_thres}" \
+    args.name += f"_normf{args.norm_func}" \
+              +  f"_inpls{args.inplanes}" \
+              +  f"_midpls{args.midplanes}" \
+              +  f"_trs{args.track_running_stats}" \
+              +  f"_wnm{args.wnorm}" \
+              +  f"_prets{args.pretrain_steps}" \
+              +  f"_nlayer{args.n_layer}" \
+              +  f"_fth{args.f_thres}" \
               +  f"_optim{args.optimizer}" \
               +  f"_lr{args.lr}"
     print(f"Experiment name: {args.name}")

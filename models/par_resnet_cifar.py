@@ -34,13 +34,13 @@ def get_norm_func():
 class PreActBasicParBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, norm_func=nn.BatchNorm2d, identity_mapping=False):
+    def __init__(self, inplanes, midplanes, planes, stride=1, norm_func=nn.BatchNorm2d, identity_mapping=False):
         super(PreActBasicParBlock, self).__init__()
         self.bn1 = norm_func(inplanes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn2 = norm_func(planes)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv1 = conv3x3(inplanes, midplanes, stride)
+        self.bn2 = norm_func(midplanes)
+        self.conv2 = conv3x3(midplanes, planes)
         self.stride = stride
 
         self.identity_mapping = identity_mapping
@@ -158,6 +158,7 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         wnorm=kwargs.get("wnorm", False) # weight normalization
         # self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
         self.inplanes=kwargs.get("inplanes", 16)
+        midplanes=kwargs.get("midplanes", 16)
 
         inplanes = self.inplanes
 
@@ -166,9 +167,9 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
 
         self.transitions = [[None] * 3 for i in range (3)]
-        self.transitions[0][0] = self._make_cell(block, inplanes*1, inplanes*1)  # 32x32x16
-        self.transitions[1][1] = self._make_cell(block, inplanes*2, inplanes*2)  # 16x16x32
-        self.transitions[2][2] = self._make_cell(block, inplanes*4, inplanes*4)  #   8x8x64
+        self.transitions[0][0] = self._make_cell(block, inplanes*1, midplanes*1, inplanes*1)  # 32x32x16
+        self.transitions[1][1] = self._make_cell(block, inplanes*2, midplanes*2, inplanes*2)  # 16x16x32
+        self.transitions[2][2] = self._make_cell(block, inplanes*4, midplanes*4, inplanes*4)  #   8x8x64
         self.transitions[0][1] = self._make_transition(down_block, inplanes, inplanes*2, 1)
         # self.transitions[0][2] = self._make_transition(down_block, inplanes, inplanes*4, 2)
         self.transitions[1][2] = self._make_transition(down_block, inplanes*2, inplanes*4, 1)
@@ -194,8 +195,8 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         if wnorm:
             self.wnorm()
 
-    def _make_cell(self, block, inplanes, planes):
-        return block(inplanes, planes, norm_func=self.norm_func)
+    def _make_cell(self, block, inplanes, midplanes, planes):
+        return block(inplanes, midplanes, planes, norm_func=self.norm_func)
     
     def _make_transition(self, block, inplanes, planes, layers=2):
         return block(inplanes, planes, layers=layers, norm_func=self.norm_func)
@@ -258,7 +259,7 @@ def wtii_preact_parresnet110_cifar(layers=18, **kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet110_cifar(inplanes=16, wnorm=False)
+    net = wtii_preact_parresnet110_cifar(inplanes=32, midplanes=136, wnorm=False)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)

@@ -2,7 +2,7 @@
 
 # forward
 
-work_dir=DEQparallel-low_n_layer_pretraining
+work_dir=DEQparallel-midplanes
 
 # for optim in adam
 # do
@@ -23,19 +23,22 @@ do
 for lr in 0.01
 do
     name=exp.$mode.$lr
-    sbatch -c 3 -G 1 -t 6320 run.sh --epoch 160 --batch-size 128 -ct 10 \
+    # sbatch -c 3 -G 1 -t 6320
+    bash run.sh --epoch 160 --batch-size 128 -ct 10 \
     --name $name \
     --optimizer $optim \
     --lr $lr \
     --n_layer 5 \
     --pretrain_steps 20 \
     --test_mode broyden \
-    --inplanes 61 \
+    --inplanes 16 \
+    --midplanes 283 \
     --track_running_stats \
+    --model_type deq_parresnet110_cifar \
     --work_dir experiments/$work_dir \
     --save_dir result/$work_dir.$name.$optim.$lr.61
 done
-done
+done &
 
-# tensorboard dev upload --logdir experiments/$work_dir-10
+tensorboard dev upload --logdir experiments/$work_dir-10
 
