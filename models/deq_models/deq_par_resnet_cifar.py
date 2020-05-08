@@ -5,6 +5,7 @@ from models.deq_models.deq_modules.deq import *
 from models.par_resnet_cifar import *
 from models.deq_models.deq_par_resnet_cifar_module import ParResNetDEQModule
 from utils.plot_utils import DEQMeter
+import pickle
 
 
 class DEQParResNetLayer(nn.Module):
@@ -53,6 +54,7 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
 
         self.pretrain_steps = kwargs.get("pretrain_steps", -1)
         self.n_layer = kwargs.get("n_layer", 3)
+        self.test_mode = kwargs.get("test_mode", "broyden")
 
         self.func = DEQParResNetLayer(self.layer)
         self.func_copy = copy.deepcopy(self.func)
@@ -60,6 +62,8 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
         self.deq = ParResNetDEQModule(self.func, self.func_copy)
 
         self.meter = DEQMeter(self.layer)
+        
+        
 
     def _infer_shapes(self, x):
         bs = x.shape[0]
@@ -113,19 +117,28 @@ class DEQParResNet(WTIIPreAct_ParResNet_Cifar):
         # self.reset()
         z = self.func.img2seq(z1, z2, z3)
 
-        if 0 <= train_step < self.pretrain_steps:
+        if self.test_mode == "forward" or 0 <= train_step < self.pretrain_steps:
             if debug:
                 self.forward_tr = []
+            if store_trajs is not None:
+                traj = [z.cpu().detach()]
             self.layer.reset()
             min_diff = 1e10
             prev = z
             for i in range(self.n_layer):
                 z = self.func(z, us, None, debug=debug)
+                #################################
+                # analysis of convergence here
                 if debug:
                     self.forward_tr.append((z - prev).norm().item())
                 min_diff = min(min_diff, (z - prev).norm().item())
                 prev = z
+                if store_trajs is not None:
+                    traj.append(z.cpu().detach())
+                #
+                #################################
             self.layer.info["pretrain_diffs"] = min_diff
+            if store_trajs is not None: pickle.dump(traj, store_trajs)
         else:
             self.layer.reset()
             self.func_copy.copy(self.func)
