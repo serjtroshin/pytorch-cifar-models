@@ -286,11 +286,11 @@ class ResNet_Cifar(nn.Module):
 
 class PreAct_ResNet_Cifar(nn.Module):
 
-    def __init__(self, block, layers, num_classes=10, inplanes=16):
+    def __init__(self, block, layers, num_classes=10, inplanes=16, **kwargs):
         super(PreAct_ResNet_Cifar, self).__init__()
         self.inplanes = inplanes
         self.conv1 = nn.Conv2d(3, inplanes, kernel_size=3, stride=1, padding=1, bias=False)
-        skip_block = False # set true is use only one block (experimental purpose only)
+        skip_block = True # set true is use only one block (experimental purpose only)
         self.layer1 = self._make_layer(block, inplanes, layers[0])
         self.layer2 = self._make_layer(block, inplanes * 2, layers[1], stride=2, skip_block=skip_block)
         self.layer3 = self._make_layer(block, inplanes * 4, layers[2], stride=2, skip_block=skip_block)
@@ -339,6 +339,16 @@ class PreAct_ResNet_Cifar(nn.Module):
         return x
 
 
+class DummyLayer(nn.Module):
+    def __init__(self):
+        super(DummyLayer, self).__init__()
+        self.layers=1
+    def wnorm(self):
+        pass
+    def get_diffs(self):
+        return ""
+    def forward(self, z, x, **kwargs):
+        return x, None
 
 class WTIIPreAct_ResNet_Cifar(nn.Module):
 
@@ -347,6 +357,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
 
         norm_func=kwargs.get("norm_func", "inst")
         wnorm=kwargs.get("wnorm", False) # weight normalization
+        skip_block=kwargs.get("skip_block", False) # set true is use only one block (experimental purpose only)
         self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
         self.inplanes=kwargs.get("inplanes", 16)
         midplanes=kwargs.get("midplanes", 16)
@@ -358,13 +369,13 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
         tmp = self.inplanes
         _, self.layer1 = self._make_layer(block, midplanes, inplanes, layers[0])
-        self.down12, self.layer2 = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2)
-        self.down23, self.layer3 = self._make_layer(block, midplanes*4, inplanes*4, layers[2], stride=2)
+        self.down12, self.layer2 = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2, skip_block=skip_block)
+        self.down23, self.layer3 = self._make_layer(block, midplanes*4, inplanes*4, layers[2], stride=2, skip_block=skip_block)
         if copy_layers:
             self.inplanes = tmp
             _, self.layer1_copy = self._make_layer(block, midplanes, inplanes, layers[0])
-            _, self.layer2_copy = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2)
-            _, self.layer3_copy = self._make_layer(block, midplanes*4, inplanes*4, layers[2], stride=2)
+            _, self.layer2_copy = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2, skip_block=skip_block)
+            _, self.layer3_copy = self._make_layer(block, midplanes*4, inplanes*4, layers[2], stride=2, skip_block=skip_block)
         self.bn = self.norm_func(inplanes*4*block.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
@@ -388,7 +399,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.layer2.wnorm()
         self.layer3.wnorm()
 
-    def _make_layer(self, block, midplanes, planes, blocks, stride=1):
+    def _make_layer(self, block, midplanes, planes, blocks, stride=1, skip_block=False):
         downsample = None
         if stride != 1 or self.inplanes != planes*block.expansion:
             downsample = nn.Sequential(
@@ -399,7 +410,9 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         
         layers.append(downsample)
         self.inplanes = planes*block.expansion
-
+        if skip_block:
+            layers.append(DummyLayer())
+            return layers
         layers.append(SequentialLayer(
                         block(self.inplanes, midplanes, planes, 
                             norm_func=self.norm_func, 
@@ -415,6 +428,15 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         info3 = self.layer3.get_diffs()
         diffs = [info1, info2, info3]
         return diffs
+    
+    def update_meters(self, _):
+        pass
+
+    def get_diffs(self):
+        return None
+
+    def get_grads(self):
+        return None
 
     def forward(self, x, debug=False, **kwargs):
         x = self.conv1(x)
@@ -505,12 +527,12 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_resnet110_cifar(num_classes=10, inplanes=16, midplanes=32)
+    net = preact_resnet110_cifar(num_classes=10, inplanes=21, midplanes=21, skip_block=True)
     # net = preact_resnet110_cifar()
 
     y = net(torch.randn(1, 3, 32, 32))
     print(net)
     print(y.size())
-    n_all_param = sum([p.nelement() for p in net.layer1.parameters() if p.requires_grad])
+    n_all_param = sum([p.nelement() for p in net.parameters() if p.requires_grad])
     print(f'#params = {n_all_param}')
 

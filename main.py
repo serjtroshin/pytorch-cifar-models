@@ -29,7 +29,11 @@ parser.add_argument("--work_dir", default="ResNetexps", type=str,
                     help="experiment directory.")
 parser.add_argument("--save_dir", default="result/preact_resnet110_cifar", type=str,
                     help="where to save model") 
-parser.add_argument("--model_type", choices=["wtii_deq_preact_resnet110_cifar", "deq_parresnet110_cifar"],
+parser.add_argument("--model_type", choices=[
+                        "wtii_deq_preact_resnet110_cifar", 
+                        "deq_parresnet110_cifar",
+                        "preact_resnet110_cifar",
+                        "wtii_preact_resnet110_cifar"],
                     help="type of the model (sequential, parallel)")
 parser.add_argument('--resume', default='', type=str, metavar='PATH', 
                     help='path to latest checkpoint (default: none)')   
@@ -97,6 +101,8 @@ parser.add_argument('--store_trajs', action='store_true',
                     help="if store forward trajectories of broyden")
 
 parser.add_argument('--midplanes', default=16, type=int)
+parser.add_argument('--skip_block', action='store_true',
+                    help='if use only one block')
 
                           
 
@@ -157,6 +163,7 @@ def main():
             track_running_stats=args.track_running_stats,
             n_layer=args.n_layer,
             test_mode=args.test_mode,
+            skip_block=args.skip_block,
         )
         # model = preact_resnet110_cifar(num_classes=10, inplanes=16)
 
@@ -355,20 +362,22 @@ def train(trainloader, model, criterion, optimizer, epoch):
                                 train_global_it)
             if isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
                 diffs = model.module.get_diffs()
-                for mode in diffs:
-                    diff = diffs[mode]
-                    for layer in diff:
-                        meter = diff[layer]
-                        if meter.val is not None:
-                            writer.add_scalar(f'train/{mode}_{layer}',
-                                        meter.val, 
-                                        train_global_it)  
+                if diffs is not None:
+                    for mode in diffs:
+                        diff = diffs[mode]
+                        for layer in diff:
+                            meter = diff[layer]
+                            if meter.val is not None:
+                                writer.add_scalar(f'train/{mode}_{layer}',
+                                            meter.val, 
+                                            train_global_it)  
                 grads = model.module.get_grads()
-                for key in grads:
-                    if grads[key].val is not None:
-                        writer.add_scalar(f'train/grad{key}',
-                                    grads[key].val, 
-                                    train_global_it)                 
+                if grads is not None:
+                    for key in grads:
+                        if grads[key].val is not None:
+                            writer.add_scalar(f'train/grad{key}',
+                                        grads[key].val, 
+                                        train_global_it)                 
             train_global_it += 1
             if args.debug and train_global_it >= args.max_train_it:
                 break
@@ -424,14 +433,15 @@ def validate(val_loader, model, criterion, store_trajs=None):
                                     test_global_it)
                 if isinstance(model.module, (WTIIPreAct_ResNet_Cifar, WTIIPreAct_ParResNet_Cifar)):
                     diffs = model.module.get_diffs()
-                    for mode in diffs:
-                        diff = diffs[mode]
-                        for layer in diff:
-                            meter = diff[layer]
-                            if meter.val is not None:
-                                writer.add_scalar(f'test/{mode}_{layer}',
-                                            meter.val, 
-                                            test_global_it) 
+                    if diffs is not None:
+                        for mode in diffs:
+                            diff = diffs[mode]
+                            for layer in diff:
+                                meter = diff[layer]
+                                if meter.val is not None:
+                                    writer.add_scalar(f'test/{mode}_{layer}',
+                                                meter.val, 
+                                                test_global_it) 
                 test_global_it += 1
                 if args.debug and test_global_it >= args.max_test_it:
                     break

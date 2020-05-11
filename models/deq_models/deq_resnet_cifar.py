@@ -111,6 +111,7 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         self.pretrain_steps = kwargs.get("pretrain_steps", 200)
         self.n_layer = kwargs.get("n_layer", 3)
         self.test_mode = kwargs.get("test_mode", "broyden")
+        self.skip_block = kwargs.get("skip_block", False)
 
         self.deq_layer1 = ResNetToDEQWrapper(self.layer1, self.layer1_copy, n_layer=self.n_layer)
         self.deq_layer2 = ResNetToDEQWrapper(self.layer2, self.layer2_copy, n_layer=self.n_layer)
@@ -166,9 +167,11 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
         x = self.conv1(x)
         x = self.deq_layer1(x, f_thres, debug, do_pretraning, store_trajs)
         x = self.down12(x)
-        x = self.deq_layer2(x, f_thres, debug, do_pretraning, store_trajs)
+        if not self.skip_block:
+            x = self.deq_layer2(x, f_thres, debug, do_pretraning, store_trajs)
         x = self.down23(x)
-        x = self.deq_layer3(x, f_thres, debug, do_pretraning, store_trajs)
+        if not self.skip_block:
+            x = self.deq_layer3(x, f_thres, debug, do_pretraning, store_trajs)
         x = self.bn(x)
         x = self.relu(x)
         x = self.avgpool(x)

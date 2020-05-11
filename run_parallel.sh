@@ -20,12 +20,10 @@ work_dir=DEQparallel-midplanes
 
 for optim in adam
 do
-for lr in 0.01
+for lr in 0.01 0.1 0.001 0.0001
 do
-    name=exp.$mode.$lr
-    # sbatch -c 3 -G 1 -t 6320
-    bash run.sh --epoch 160 --batch-size 128 -ct 10 \
-    --name $name \
+    sbatch -c 3 -G 1 -t 6320 run.sh --epoch 160 --batch-size 128 -ct 10 \
+    --name $work_dir \
     --optimizer $optim \
     --lr $lr \
     --n_layer 5 \
@@ -38,7 +36,7 @@ do
     --work_dir experiments/$work_dir \
     --save_dir result/$work_dir.$name.$optim.$lr.61
 done
-done &
+done
 
 tensorboard dev upload --logdir experiments/$work_dir-10
 
