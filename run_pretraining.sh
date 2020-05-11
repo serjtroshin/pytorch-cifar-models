@@ -2,7 +2,7 @@
 
 # forward
 
-work_dir=DEQsequential-pretraining-grid-final
+work_dir=DEQsequential-pretraining-grid-final-final
 
 for opt in adam
 do
@@ -17,6 +17,7 @@ sbatch -c 3 -G 1  run.sh --epoch 10 --batch-size 128 -ct 10 \
 --midplanes 64 \
 --work_dir experiments/$work_dir \
 --track_running_stats \
+--skip_block \
 --model_type wtii_deq_preact_resnet110_cifar \
 --save_dir pretrained_models/pretrained_5layer_oneblock64.$opt.$lr.track_running_stats
 done

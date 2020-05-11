@@ -158,8 +158,9 @@ class DEQSeqResNet(WTIIPreAct_ResNet_Cifar):
     def update_meters(self, input):
         # just for plots
         self.deq_layer1.update(input)
-        self.deq_layer2.update(input)
-        self.deq_layer3.update(input)
+        if not self.skip_block:
+            self.deq_layer2.update(input)
+            self.deq_layer3.update(input)
 
     def forward(self, x, train_step=-1,f_thres=30, b_thres=40, debug=False, store_trajs=None):
 

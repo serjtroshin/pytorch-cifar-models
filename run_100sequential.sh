@@ -2,65 +2,48 @@
 
 # forward
 
-work_dir=DEQsequential-continue
+work_dir=DEQsequential-baseline
 
-# name=sequential_broyden
-# for opt in adam
+# name=forward
+# for opt in sgd
 # do
-# for lr in 0.1 0.01 0.001
+# for lr in 0.1
+# do
+# for inplanes in 16
 # do
 # sbatch -c 3 -G 1 -t 6320 run.sh --epoch 160 --batch-size 128 -ct 100 \
 # --name $name \
 # --optimizer $opt --lr $lr \
-# --test_mode broyden \
-# --n_layer 5 \
-# --inplanes 61 \
-# --pretrain_steps 20 \
-# --work_dir experiments/$work_dir \
-# --track_running_stats \
-# --save_dir result/$work_dir.$name.$opt.$lr.61
-# done
-# done
-
-
-# name=sequential_broyden
-# for opt in adam
-# do
-# for lr in 0.01
-# do
-# bash run.sh --epoch 160 --batch-size 128 -ct 100 \
-# --name $name \
-# --optimizer $opt --lr $lr \
-# --test_mode broyden \
-# --n_layer 5 \
+# --n_layer 18 \
 # --inplanes 16 \
-# --midplanes 100 \
-# --pretrain_steps 50 \
 # --work_dir experiments/$work_dir \
 # --track_running_stats \
-# --save_dir result/$work_dir.$name.$opt.$lr.inplanes16.midplanes100
+# --model_type preact_resnet164_cifar \
+# --save_dir result/$work_dir.$name.$opt.$lr.$inplanes
 # done
-# done &
+# done
+# done
 
-name=sequential_broyden
-for opt in adam
+
+name=wtii
+for opt in sgd
 do
-for lr in 0.001
+for lr in 0.1
+do
+for inplanes in 16
 do
 sbatch -c 3 -G 1 -t 6320 run.sh --epoch 160 --batch-size 128 -ct 100 \
 --name $name \
 --optimizer $opt --lr $lr \
---test_mode broyden \
---n_layer 5 \
---inplanes 61 \
---midplanes 61 \
---pretrain_steps 0 \
+--n_layer 18 \
+--inplanes 16 \
+--midplanes 84 \
 --work_dir experiments/$work_dir \
 --track_running_stats \
---model_type wtii_deq_preact_resnet110_cifar \
---resume result/DEQsequential-3blocks.sequential_broyden.adam.0.001.61/checkpoint.pth \
---save_dir result/$work_dir.$name.$opt.$lr
+--model_type wtii_preact_resnet164_cifar \
+--save_dir result/$work_dir.$name.$opt.$lr.$inplanes
+done
 done
 done
 
-# tensorboard dev upload --logdir experiments/$work_dir-10
+# tensorboard dev upload --logdir experiments/$work_dir-100

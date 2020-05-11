@@ -30,10 +30,13 @@ parser.add_argument("--work_dir", default="ResNetexps", type=str,
 parser.add_argument("--save_dir", default="result/preact_resnet110_cifar", type=str,
                     help="where to save model") 
 parser.add_argument("--model_type", choices=[
-                        "wtii_deq_preact_resnet110_cifar", 
                         "deq_parresnet110_cifar",
                         "preact_resnet110_cifar",
-                        "wtii_preact_resnet110_cifar"],
+                        "preact_resnet164_cifar",
+                        "wtii_preact_resnet110_cifar",
+                        "wtii_preact_resnet164_cifar",
+                        "wtii_preact_parresnet164_cifar",
+                        "wtii_deq_preact_resnet110_cifar"],
                     help="type of the model (sequential, parallel)")
 parser.add_argument('--resume', default='', type=str, metavar='PATH', 
                     help='path to latest checkpoint (default: none)')   
@@ -120,7 +123,8 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
-    args.name += f"_ct{args.cifar_type}" \
+    args.name += f"_{args.model_type}" \
+              +  f"_ct{args.cifar_type}" \
               +  f"_normf{args.norm_func}" \
               +  f"_inpls{args.inplanes}" \
               +  f"_midpls{args.midplanes}" \
@@ -146,7 +150,7 @@ def main():
     if use_gpu:
         import multiprocessing as mp 
         mp.set_start_method('spawn')
-        # https://github.com/pytorch/pytorch/issues/2517
+        # # https://github.com/pytorch/pytorch/issues/2517
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
         torch.cuda.manual_seed_all(args.seed)
 
@@ -183,7 +187,6 @@ def main():
         else:
             logging('model type unrecognized...')
             return
-
         model = nn.DataParallel(model).cuda()
         criterion = nn.CrossEntropyLoss().cuda()
         if args.optimizer == "sgd":

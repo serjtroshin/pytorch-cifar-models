@@ -230,6 +230,77 @@ class PreActBottleneck(nn.Module):
         return out
 
 
+class IIPreActBottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, midplanes, planes, stride=1, downsample=None, 
+                    norm_func=nn.InstanceNorm2d, identity_mapping=False,
+                    dropout=0.0):
+        super(IIPreActBottleneck, self).__init__()
+        self.dropout = VariationalDropout(dropout) # not used
+        self.bn1 = norm_func(inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv2d(inplanes * 2, midplanes, kernel_size=1, bias=False)
+        self.bn2 = norm_func(midplanes)
+        self.conv2 = nn.Conv2d(midplanes, midplanes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn3 = norm_func(midplanes)
+        self.conv3 = nn.Conv2d(midplanes, planes*4, kernel_size=1, bias=False)
+        if not identity_mapping:
+            self.norml = norm_func(planes*4)
+        self.downsample = downsample
+        self.stride = stride
+
+        self.identity_mapping = identity_mapping
+    
+    def wnorm(self):
+        self.conv1, self.conv1_fn = weight_norm(module=self.conv1, names=['weight'], dim=0)
+        self.conv2, self.conv2_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
+        self.conv3, self.conv3_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
+
+    def reset(self):
+        if 'conv1_fn' in self.__dict__:
+            self.conv1_fn.reset(self.conv1)
+        if 'conv2_fn' in self.__dict__:
+            self.conv2_fn.reset(self.conv2)
+        if 'conv3_fn' in self.__dict__:
+            self.conv3_fn.reset(self.conv3)
+
+    def copy(self, func):
+        self.conv1.weight.data = func.conv1.weight.data.clone()
+        self.conv2.weight.data = func.conv2.weight.data.clone()
+        self.conv3.weight.data = func.conv3.weight.data.clone()
+
+    def forward(self, z, x):
+        x = self.dropout(x)
+
+        residual = z
+        
+        z = self.bn1(z)
+        z = self.relu(z)
+
+        z_cat = torch.cat((z, x), 1)
+
+        if self.downsample is not None: # Not really using it here
+            residual = self.downsample(z)
+            x = self.downsample(x)
+
+        out = self.conv1(z_cat)
+
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+
+        out = self.bn3(out)
+        out = self.relu(out)
+        out = self.conv3(out)
+
+        out += residual
+
+        if not self.identity_mapping:
+            out = self.norml(out) 
+
+        return out, x
+
 class ResNet_Cifar(nn.Module):
 
     def __init__(self, block, layers, num_classes=10):
@@ -355,7 +426,8 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
     def __init__(self, block, layers, num_classes=10, copy_layers=False, **kwargs):
         super(WTIIPreAct_ResNet_Cifar, self).__init__()
 
-        norm_func=kwargs.get("norm_func", "inst")
+        track_running_stats=kwargs.get("track_running_stats", False)
+        self.norm_func=partial(get_norm_func()[kwargs.get("norm_func", "batch")], track_running_stats=track_running_stats)
         wnorm=kwargs.get("wnorm", False) # weight normalization
         skip_block=kwargs.get("skip_block", False) # set true is use only one block (experimental purpose only)
         self.identity_mapping=kwargs.get("identity_mapping", False) # is identity path clear
@@ -364,9 +436,7 @@ class WTIIPreAct_ResNet_Cifar(nn.Module):
         self.dropout=kwargs.get("dropout", 0.0)
         inplanes = self.inplanes
 
-        self.norm_func = get_norm_func()[norm_func]
-
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(3, self.inplanes * block.expansion, kernel_size=3, stride=1, padding=1, bias=False)
         tmp = self.inplanes
         _, self.layer1 = self._make_layer(block, midplanes, inplanes, layers[0])
         self.down12, self.layer2 = self._make_layer(block, midplanes*2, inplanes*2, layers[1], stride=2, skip_block=skip_block)
@@ -520,6 +590,9 @@ def preact_resnet164_cifar(**kwargs):
     model = PreAct_ResNet_Cifar(PreActBottleneck, [18, 18, 18], **kwargs)
     return model
 
+def wtii_preact_resnet164_cifar(**kwargs):
+    model = WTIIPreAct_ResNet_Cifar(IIPreActBottleneck, [18, 18, 18], **kwargs)
+    return model
 
 def preact_resnet1001_cifar(**kwargs):
     model = PreAct_ResNet_Cifar(PreActBottleneck, [111, 111, 111], **kwargs)
@@ -527,7 +600,7 @@ def preact_resnet1001_cifar(**kwargs):
 
 
 if __name__ == '__main__':
-    net = preact_resnet110_cifar(num_classes=10, inplanes=21, midplanes=21, skip_block=True)
+    net = wtii_preact_resnet164_cifar(num_classes=100, inplanes=16, midplanes=84, track_running_stats=True)
     # net = preact_resnet110_cifar()
 
     y = net(torch.randn(1, 3, 32, 32))

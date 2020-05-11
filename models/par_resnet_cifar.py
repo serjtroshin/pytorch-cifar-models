@@ -82,6 +82,73 @@ class PreActBasicParBlock(nn.Module):
         return out
 
 
+class PreActBottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, midplanes, planes, stride=1, downsample=None, 
+                    norm_func=nn.InstanceNorm2d, identity_mapping=False,
+                    dropout=0.0):
+        super(PreActBottleneck, self).__init__()
+        self.dropout = VariationalDropout(dropout) # not used
+        self.bn1 = norm_func(inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv2d(inplanes, midplanes, kernel_size=1, bias=False)
+        self.bn2 = norm_func(midplanes)
+        self.conv2 = nn.Conv2d(midplanes, midplanes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn3 = norm_func(midplanes)
+        self.conv3 = nn.Conv2d(midplanes, planes*4, kernel_size=1, bias=False)
+        if not identity_mapping:
+            self.norml = norm_func(planes*4)
+        self.downsample = downsample
+        self.stride = stride
+
+        self.identity_mapping = identity_mapping
+    
+    def wnorm(self):
+        self.conv1, self.conv1_fn = weight_norm(module=self.conv1, names=['weight'], dim=0)
+        self.conv2, self.conv2_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
+        self.conv3, self.conv3_fn = weight_norm(module=self.conv2, names=['weight'], dim=0)
+
+    def reset(self):
+        if 'conv1_fn' in self.__dict__:
+            self.conv1_fn.reset(self.conv1)
+        if 'conv2_fn' in self.__dict__:
+            self.conv2_fn.reset(self.conv2)
+        if 'conv3_fn' in self.__dict__:
+            self.conv3_fn.reset(self.conv3)
+
+    def copy(self, func):
+        self.conv1.weight.data = func.conv1.weight.data.clone()
+        self.conv2.weight.data = func.conv2.weight.data.clone()
+        self.conv3.weight.data = func.conv3.weight.data.clone()
+
+    def forward(self, z):
+        residual = z
+
+        out = self.bn1(z)
+        out = self.relu(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(out)
+
+        out = self.conv1(out)
+
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+
+        out = self.bn3(out)
+        out = self.relu(out)
+        out = self.conv3(out)
+
+        out += residual
+
+        if not self.identity_mapping:
+            out = self.norml(out) 
+
+        return out
+
+
 class TransitionBlock(nn.Module):
     expansion = 1
 
@@ -164,15 +231,15 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
 
         self.layers = layers
 
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(3, self.inplanes*block.expansion, kernel_size=3, stride=1, padding=1, bias=False)
 
         self.transitions = [[None] * 3 for i in range (3)]
         self.transitions[0][0] = self._make_cell(block, inplanes*1, midplanes*1, inplanes*1)  # 32x32x16
         self.transitions[1][1] = self._make_cell(block, inplanes*2, midplanes*2, inplanes*2)  # 16x16x32
         self.transitions[2][2] = self._make_cell(block, inplanes*4, midplanes*4, inplanes*4)  #   8x8x64
-        self.transitions[0][1] = self._make_transition(down_block, inplanes, inplanes*2, 1)
+        self.transitions[0][1] = self._make_transition(down_block, inplanes, inplanes*2, 1, block.expansion)
         # self.transitions[0][2] = self._make_transition(down_block, inplanes, inplanes*4, 2)
-        self.transitions[1][2] = self._make_transition(down_block, inplanes*2, inplanes*4, 1)
+        self.transitions[1][2] = self._make_transition(down_block, inplanes*2, inplanes*4, 1, block.expansion)
         # self.transitions[1][0] = self._make_transition(up_block, inplanes*2, inplanes, 1)
         # self.transitions[2][0] = self._make_transition(up_block, inplanes*4, inplanes, 2)
         # self.transitions[2][1] = self._make_transition(up_block, inplanes*4, inplanes*2, 1)
@@ -183,6 +250,7 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(8, stride=1)
         self.fc = nn.Linear(inplanes*4*block.expansion, num_classes)
+        self.expansion = block.expansion
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):  # todo
@@ -196,10 +264,10 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
             self.wnorm()
 
     def _make_cell(self, block, inplanes, midplanes, planes):
-        return block(inplanes, midplanes, planes, norm_func=self.norm_func)
+        return block(inplanes * block.expansion, midplanes, planes, norm_func=self.norm_func)
     
-    def _make_transition(self, block, inplanes, planes, layers=2):
-        return block(inplanes, planes, layers=layers, norm_func=self.norm_func)
+    def _make_transition(self, block, inplanes, planes, layers=2, expansion=1):
+        return block(inplanes * expansion, planes * expansion, layers=layers, norm_func=self.norm_func)
 
     def _make_layer(self, transitions, stride=1):
         return Parallel(transitions)
@@ -224,17 +292,25 @@ class WTIIPreAct_ParResNet_Cifar(nn.Module):
         diffs = [info]
         return diffs
 
-    def forward(self, x, debug=False):
+    def update_meters(self, _):
+        pass
+
+    def get_diffs(self):
+        return None
+
+    def get_grads(self):
+        return None
+
+    def forward(self, x, debug=False, **kwargs):
         self.layer.reset()
 
         bs = x.shape[0]
         h, w = x.shape[2:]
 
         x = self.conv1(x)
-
-        z1 = torch.zeros((bs, self.inplanes, h, w), device=x.device)
-        z2 = torch.zeros((bs, self.inplanes * 2, h // 2, w // 2), device=x.device)
-        z3 = torch.zeros((bs, self.inplanes * 4, h // 4, w // 4), device=x.device)
+        z1 = torch.zeros((bs, self.inplanes * self.expansion, h, w), device=x.device)
+        z2 = torch.zeros((bs, self.inplanes * 2 * self.expansion, h // 2, w // 2), device=x.device)
+        z3 = torch.zeros((bs, self.inplanes * 4 * self.expansion, h // 4, w // 4), device=x.device)
 
         self.reset()
         for i in range(self.layers):
@@ -257,9 +333,13 @@ def wtii_preact_parresnet110_cifar(layers=18, **kwargs):
     model = WTIIPreAct_ParResNet_Cifar(PreActBasicParBlock, DownBlock, UpBlock, layers, **kwargs)
     return model
 
+def wtii_preact_parresnet164_cifar(layers=18, **kwargs):
+    model = WTIIPreAct_ParResNet_Cifar(PreActBottleneck, DownBlock, UpBlock, layers, **kwargs)
+    return model
+
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet110_cifar(inplanes=32, midplanes=136, wnorm=False)
+    net = wtii_preact_parresnet164_cifar(inplanes=16, midplanes=78, wnorm=False, track_running_stats=True)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)
