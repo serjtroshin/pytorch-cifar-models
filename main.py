@@ -120,7 +120,8 @@ def main():
         print("running in cpu mode!")
     use_gpu = torch.cuda.is_available()
 
-    args.name += f"_normf{args.norm_func}" \
+    args.name += f"_ct{args.cifar_type}" \
+              +  f"_normf{args.norm_func}" \
               +  f"_inpls{args.inplanes}" \
               +  f"_midpls{args.midplanes}" \
               +  f"_trs{args.track_running_stats}" \
@@ -155,7 +156,9 @@ def main():
 
         # wtii_deq_preact_resnet110_cifar
         #deq_parresnet110_cifar
-        model = eval(args.model_type)(wnorm=args.wnorm, 
+        model = eval(args.model_type)(
+            num_classes=int(args.cifar_type),
+            wnorm=args.wnorm, 
             pretrain_steps=args.pretrain_steps,
             inplanes=args.inplanes,
             midplanes=args.midplanes,

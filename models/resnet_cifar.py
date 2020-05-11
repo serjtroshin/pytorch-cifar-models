@@ -290,7 +290,7 @@ class PreAct_ResNet_Cifar(nn.Module):
         super(PreAct_ResNet_Cifar, self).__init__()
         self.inplanes = inplanes
         self.conv1 = nn.Conv2d(3, inplanes, kernel_size=3, stride=1, padding=1, bias=False)
-        skip_block = True # set true is use only one block (experimental purpose only)
+        skip_block = kwargs.get("skip_block", False) # set true is use only one block (experimental purpose only)
         self.layer1 = self._make_layer(block, inplanes, layers[0])
         self.layer2 = self._make_layer(block, inplanes * 2, layers[1], stride=2, skip_block=skip_block)
         self.layer3 = self._make_layer(block, inplanes * 4, layers[2], stride=2, skip_block=skip_block)
