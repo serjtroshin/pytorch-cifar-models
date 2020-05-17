@@ -339,7 +339,7 @@ def wtii_preact_parresnet164_cifar(layers=18, **kwargs):
 
 
 if __name__ == '__main__':
-    net = wtii_preact_parresnet164_cifar(inplanes=16, midplanes=78, wnorm=False, track_running_stats=True)
+    net = wtii_preact_parresnet110_cifar(inplanes=61, midplanes=61, wnorm=False, track_running_stats=True)
     #net = preact_resnet110_cifar()
     y, diffs = net(torch.randn(1, 3, 32, 32), debug=True)
     print(net)

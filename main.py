@@ -35,6 +35,7 @@ parser.add_argument("--model_type", choices=[
                         "preact_resnet164_cifar",
                         "wtii_preact_resnet110_cifar",
                         "wtii_preact_resnet164_cifar",
+                        "wtii_preact_parresnet110_cifar",
                         "wtii_preact_parresnet164_cifar",
                         "wtii_deq_preact_resnet110_cifar"],
                     help="type of the model (sequential, parallel)")
@@ -192,7 +193,7 @@ def main():
         if args.optimizer == "sgd":
             optimizer = optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
         elif args.optimizer == "adam":
-            optimizer = optim.Adam(model.parameters(), lr=args.lr)
+            optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         cudnn.benchmark = True
     else:
         logging('Cuda is not available!')
